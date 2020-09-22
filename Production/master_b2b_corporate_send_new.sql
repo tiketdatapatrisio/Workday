@@ -1,0 +1,1 @@
+select * except(processed_date) from `datamart-finance.datasource_workday.master_b2b_corporate` where processed_date = date(current_timestamp(), 'Asia/Jakarta')
