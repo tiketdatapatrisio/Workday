@@ -611,6 +611,7 @@ wsr_id as (
     order_detail_id
     , string_agg(distinct 
       case
+        when ocf.vendor = 'na' and ocf.account='tiketcomLionVedaleon' then 'VR-00017129'
         when ocf.vendor = 'sa' then wsr_name.workday_supplier_reference_id
         when ocf.vendor = 'na' then wsr_id.workday_supplier_reference_id
       end) as supplier_flight
@@ -761,6 +762,7 @@ wsr_id as (
     order_detail_id as flight_reschedule_old_order_detail_id
     , string_agg(distinct 
       case
+        when ocf.vendor = 'na' and ocf.account='tiketcomLionVedaleon' then 'VR-00017129'
         when ocf.vendor = 'sa' then wsr_name.workday_supplier_reference_id
         when ocf.vendor = 'na' then wsr_id.workday_supplier_reference_id
       end) as supplier_reschedule_flight
@@ -781,6 +783,7 @@ wsr_id as (
      , order_detail_id as halodoc_order_detail_id
      , sum(total_price) as halodoc_sell_price_amount
      , 1 as is_has_halodoc_flag
+     , string_agg(distinct desc_addons) as desc_addons
   from
     (
     select
@@ -789,11 +792,12 @@ wsr_id as (
       , total_price
       , updated_at 
       , processed_dttm
+      , json_extract_scalar(param_json,'$[0].description.') as desc_addons
       , row_number() over (partition by order_detail_id order by updated_at desc ,processed_dttm desc) rn
     from 
       `datamart-finance.staging.v_order__cart_bundling_addons`
     group by
-      1,2,3,4,5
+      1,2,3,4,5,6
     )
   where
     rn = 1
@@ -830,6 +834,23 @@ wsr_id as (
   where
     order_type = 'bundling_addons'
 )
+, ocfc as (
+  select
+    order_detail_id
+    , round(total,0) as order_flight_commission
+  from
+    (
+      select
+        order_detail_id
+        , safe_cast(total as float64) as total
+        , row_number() over(partition by order_detail_id order by processed_dttm desc, updated_timestamp desc) as rn
+      from
+        `datamart-finance.staging.v_order__cart_flight_comission` 
+      where
+        created_timestamp >= (select filter2 from fd)
+    )
+  where rn = 1
+)
 , fact_flight as (
   select
     order_detail_id
@@ -839,6 +860,7 @@ wsr_id as (
     , cogs_price_nta_flight
     , commission_flight
     , commission_price_nta_flight
+    , order_flight_commission
     , baggage_fee
     , booking_code_flight
     , ticket_number_flight
@@ -849,6 +871,7 @@ wsr_id as (
     , halodoc_pax_count
     , is_has_halodoc_flag  
     , halodoc_detail_name
+    , desc_addons
     , 'Ticket' as revenue_category_flight
     , 'Flight' as product_category_flight
   from
@@ -857,6 +880,7 @@ wsr_id as (
     left join ocba using (order_detail_id)
     left join ocbap using (halodoc_order_detail_id)
     left join ocdba using (halodoc_order_detail_id)
+    left join ocfc using (order_detail_id)
     
 )
 
@@ -1262,7 +1286,8 @@ wsr_id as (
           end
         , fh.cogs_hotel
         , case 
-            when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00000007') then ff.cogs_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+            when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129') then ff.cogs_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+            when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') then ff.cogs_flight - order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
             else ff.cogs_flight
           end
         , fat.cogs_airport_transfer
@@ -1288,7 +1313,8 @@ wsr_id as (
               end
           end
         , case 
-            when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00000007') then ff.commission_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+            when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129') then ff.commission_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+            when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') then order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
             else ff.commission_flight
           end
         , 0
@@ -1471,7 +1497,7 @@ wsr_id as (
       end as memo_insurance */ /*move memo_insurance to flight_insurance_array to enhance the query for multi_insurance*/
     , safe_cast(null as string) as memo_insurance
     , case 
-        when is_has_halodoc_flag = 1 then concat(safe_cast(oc.order_id as string), ' - ', halodoc_detail_name)
+        when is_has_halodoc_flag = 1 then concat(safe_cast(oc.order_id as string), ' - ', desc_addons)
         else null
       end as memo_halodoc
     , case 
