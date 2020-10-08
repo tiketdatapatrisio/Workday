@@ -477,8 +477,16 @@ lsw as (
         , null as promocode_name
         , null as booking_code
         , null as ticket_number
-        , 'Halodoc' as product_provider
-        , 'VR-00015459' as supplier
+        , case
+          when lower(memo_halodoc) like '%siloam%' then 'Siloam'
+          when lower(memo_halodoc) like '%halodoc%' then 'Halodoc'
+          when lower(memo_halodoc) like '%farma%' then 'Kimia_Farma'
+          else '' end as product_provider
+        , case
+          when lower(memo_halodoc) like '%siloam%' then '34276792'
+          when lower(memo_halodoc) like '%halodoc%' then 'VR-00015459'
+          when lower(memo_halodoc) like '%farma%' then '34305569'
+          else '' end as supplier
         , memo_halodoc as memo
         , case
             when is_has_halodoc_flag > 0 and halodoc_sell_price_amount > 0 then 1
@@ -487,7 +495,7 @@ lsw as (
         , 22 as order_for_workday
       )
       , struct(
-        'Gateway_Charges' as revenue_category
+        'Convenience_Fee' as revenue_category
         , convenience_fee_amount as extended_amount
         , 1 as quantity
         , safe_divide(convenience_fee_amount,1) as selling_price

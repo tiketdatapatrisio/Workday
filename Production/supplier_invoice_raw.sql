@@ -248,6 +248,23 @@ fd as (
   group by
     order_detail_id
 )
+, ocfc as (
+  select
+    order_detail_id
+    , round(total,0) as order_flight_commission
+  from
+    (
+      select
+        order_detail_id
+        , safe_cast(total as float64) as total
+        , row_number() over(partition by order_detail_id order by processed_dttm desc, updated_timestamp desc) as rn
+      from
+        `datamart-finance.staging.v_order__cart_flight_comission` 
+      where
+        created_timestamp >= (select filter2 from fd)
+    )
+  where rn = 1
+) 
 , ocf as (
   select
     distinct
@@ -257,6 +274,7 @@ fd as (
     , ocf.vendor
     , ocf.account
     , case
+        when ocf.vendor = 'na' and ocf.account='tiketcomLionVedaleon' then 'VR-00017129'
         when ocf.vendor = 'sa' then wsr_name.workday_supplier_reference_id
         when ocf.vendor = 'na' then wsr_id.workday_supplier_reference_id
       end as airlines_master_id
@@ -270,11 +288,13 @@ fd as (
         else 'Deposit'
       end as deposit_flag_flight
     , ticket_number
+    , ocfc.order_flight_commission
   from
     `prod-datarangers.galaxy_stg.order__cart_flight` ocf
     left join wsr_id using (airlines_master_id,vendor)
     left join wsr_name on ocf.account = wsr_name.supplier_name and ocf.vendor = 'sa'
     left join ocfp on ocf.order_detail_id = ocfp.order_detail_id
+    left join ocfc on ocf.order_detail_id = ocfc.order_detail_id
   where
     departure_time >= (select filter2 from fd)
 )
@@ -450,6 +470,7 @@ fd as (
     , hotel_itinerarynumber
     , hotel_id as hotel_id_oth
     , datetime(booking_checkindate, 'Asia/Jakarta') as booking_checkindate
+    , datetime(booking_checkoutdate, 'Asia/Jakarta') as booking_checkoutdate
     , safe_cast(nett_price as float64) as nett_price
     , round(rebooking_price) as rebooking_price_hotel
     , room_source
@@ -556,6 +577,7 @@ fd as (
         else 'IDR'
       end as net_rate_currency_hotel
     , booking_checkindate
+    , booking_checkoutdate
     , case
         when room_source = 'TIKET' then total_net_rate_price
         when room_source like '%AGODA%' then case when rebooking_price_hotel > 0 then rebooking_price_hotel - vendor_incentive else nett_price - vendor_incentive end
@@ -719,7 +741,10 @@ fd as (
     , order_detail_id
     , case
         when string_agg(distinct order_type) in ('flight', 'tix') then max(coalesce(payment_lastupdate_op,payment_timestamp_oc,payment_timestamp_op))
-        when string_agg(distinct order_type) = 'tixhotel' then max(booking_checkindate)
+        when string_agg(distinct order_type) = 'tixhotel' then 
+        case when date(max(payment_timestamp_oc)) >= '2020-10-01' then max(booking_checkoutdate) -- @01 oct 2020, change due date tixhotel with checkoutdate (request accounting team)
+          else max(booking_checkindate)
+          end
         when string_agg(distinct order_type) = 'car' then max(min_checkin_date_car)
         when string_agg(distinct order_type) = 'event' and string_agg(distinct lower(order_detail_name)) like 'sewa mobil%' then date_add(date(max(payment_timestamp_oc)), interval 1 day)
         when string_agg(distinct order_type) = 'train' then 
@@ -761,7 +786,8 @@ fd as (
         when string_agg(distinct order_type) = 'flight' 
           then sum(round(
             case 
-              when airlines_master_id in ('VR-00000006','VR-00000011','VR-00000004','VR-00000007') and date(payment_timestamp_oc) >= '2020-05-11' then price_nta /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+              when airlines_master_id in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129') and date(payment_timestamp_oc) >= '2020-05-11' then price_nta /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+              when airlines_master_id in('VR-00000003','VR-00000007','VR-00000012') and date(payment_timestamp_oc) >= '2020-10-01' then price_nta - order_flight_commission
               else balance_due
             end - baggage_fee))
         when string_agg(distinct order_type) = 'tixhotel' then sum(total_net_rate_price)
