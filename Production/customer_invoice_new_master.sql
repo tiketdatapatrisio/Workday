@@ -599,6 +599,11 @@ select
     , payment_gateway as payment_gateway
     , payment_type_bank as payment_type_bank
     , info_array.memo as memo
+    , coalesce(concat('"',safe_cast(case
+        when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
+        when customer_type = 'B2B Online' and customer_id not in ('33918862', '34276356', '34272813') then 'Deposit_B2B_Online'
+        else '' end as string),'"'),'""') as deposit_rev_category
+    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
     , info_array.order_for_workday as order_by_for_workday
 from
   info
@@ -733,6 +738,11 @@ select
     , payment_gateway as payment_gateway
     , payment_type_bank as payment_type_bank
     , info_array.memo as memo
+    , coalesce(concat('"',safe_cast(case
+        when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
+        when customer_type = 'B2B Online' and customer_id not in ('33918862', '34276356', '34272813') then 'Deposit_B2B_Online'
+        else '' end as string),'"'),'""') as deposit_rev_category
+    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
     , info_array.order_for_workday as order_by_for_workday
   from
     info_add_ons
@@ -848,6 +858,11 @@ select
     , payment_gateway as payment_gateway
     , payment_type_bank as payment_type_bank
     , info_array.memo as memo
+    , coalesce(concat('"',safe_cast(case
+        when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
+        when customer_type = 'B2B Online' and customer_id not in ('33918862', '34276356', '34272813') then 'Deposit_B2B_Online'
+        else '' end as string),'"'),'""') as deposit_rev_category
+    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
     , info_array.order_for_workday as order_by_for_workday
   from
     info_flight_multi_insurance
