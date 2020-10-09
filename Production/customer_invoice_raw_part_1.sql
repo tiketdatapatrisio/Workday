@@ -704,6 +704,18 @@ wsr_id as (
   group by
     1,2
 )
+, ocfs as (
+  select 
+    order_detail_id
+    , json_extract_scalar(fij,'$.flexi') as is_flexi
+  from 
+    `datamart-finance.staging.v_order__cart_flight_segment`
+  left join
+      unnest (json_extract_array(flight_info_json)) as fij
+  where
+    departure_time >= (select filter1 from fd)
+    and flight_date >= (select date_add((select date(filter1) from fd), interval 1 day))
+)
 , rrbc as (
   select
    order_id
@@ -1352,6 +1364,7 @@ wsr_id as (
         ff.baggage_fee
         , 0
       ) as baggage_fee
+    , ocfs.is_flexi as is_flexi_flight
     , coalesce(
         rrbc.reschedule_fee_flight
         , 0
@@ -1572,6 +1585,7 @@ wsr_id as (
     left join fact_hotel fh using (order_id)
     left join fact_airport_transfer fat using (order_detail_id)
     left join ores using (order_id)
+    left join ocfs using (order_detail_id)
     left join rrbc using (order_id, reschedule_passenger_id)
     left join ocf_reschedule using (flight_reschedule_old_order_detail_id)
     left join wmpc on wmpc.payment_type_bank = replace(coalesce(fpm2.payment_type_bank, fpm.payment_type_bank),' ','_') and wmpc.installment = oc.cc_installment and date(oc.payment_timestamp) between wmpc.start_date and coalesce(wmpc.end_date,current_date())
