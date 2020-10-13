@@ -256,8 +256,14 @@ lsw as (
         , null as promocode_name
         , null as booking_code
         , null as ticket_number
-        , product_provider_reschedule_flight as product_provider
-        , supplier_reschedule_flight as supplier
+        , case
+            when product_provider_reschedule_flight is null then product_provider
+            else product_provider_reschedule_flight
+          end as product_provider
+        , case
+            when supplier_reschedule_flight is null then supplier
+            else supplier_reschedule_flight
+          end as supplier
         , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
         , case
             when refund_deposit_value < 0 then 1
@@ -281,6 +287,27 @@ lsw as (
         , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
         , case
             when reschedule_fee_flight > 0 then 1
+            else 0
+          end as valid_struct_flag
+        , 12 as order_for_workday
+      )
+      -- add Refund_payable for hotel 
+      , struct(
+        'Refund_Payable' as revenue_category
+        , ABS(cogs+commission+refund_deposit_value) as extended_amount
+        , 1 as quantity
+        , ABS(cogs+commission+refund_deposit_value) as selling_price
+        , null as authentication_code
+        , null as virtual_account
+        , null as giftcard_voucher
+        , null as promocode_name
+        , null as booking_code
+        , null as ticket_number
+        , product_provider
+        , supplier
+        , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
+        , case
+            when cogs+commission+refund_deposit_value < 0 then 1
             else 0
           end as valid_struct_flag
         , 12 as order_for_workday
