@@ -711,15 +711,34 @@ wsr_id as (
 )
 , ocfs as (
   select 
-    order_detail_id
-    , json_extract_scalar(fij,'$.flexi') as is_flexi
+    * except (rn)
+  from
+    (
+      select 
+        order_detail_id
+        , json_extract_scalar(fij,'$.flexi') as is_flexi
+        , row_number() over(partition by order_detail_id) as rn
+      from 
+        `datamart-finance.staging.v_order__cart_flight_segment`
+      left join
+          unnest (json_extract_array(flight_info_json)) as fij
+      where
+        departure_time >= (select filter1 from fd)
+        and flight_date >= (select date_add((select date(filter1) from fd), interval 1 day))  
+    )
+  where rn = 1
+)
+, tfrro as (
+  select
+    ro.orderId as old_order_id
+    , ro.orderDetailId as old_order_detail_id
+    , ro.newOrder.orderId as new_order_id
+    , rof.orderDetailId as new_order_detail_id
+    , rof.fareDetail.fareDiff as fare_diff
   from 
-    `datamart-finance.staging.v_order__cart_flight_segment`
-  left join
-      unnest (json_extract_array(flight_info_json)) as fij
-  where
-    departure_time >= (select filter1 from fd)
-    and flight_date >= (select date_add((select date(filter1) from fd), interval 1 day))
+    `datamart-finance.staging.v_tix_flight_reschedule__reschedule_order` ro
+    , unnest(newOrder.orderDetail) as rof
+  where rescheduleStatus = 'CLOSED'
 )
 , rrbc as (
   select
@@ -1394,7 +1413,6 @@ wsr_id as (
         ff.baggage_fee
         , 0
       ) as baggage_fee
-    , ocfs.is_flexi as is_flexi_flight
     , coalesce(
         rrbc.reschedule_fee_flight
         , 0
@@ -1588,6 +1606,8 @@ wsr_id as (
         when oar.old_id_rebooking is null then 0
         else 1 
         end as is_rebooking_flag
+    , ocfs.is_flexi as is_flexi_flight
+    , safe_cast(coalesce(tfrro.fare_diff, 0) as float64) flexi_fare_diff
   from
     oc
     inner join ocd using (order_id)
@@ -1616,6 +1636,7 @@ wsr_id as (
     left join fact_airport_transfer fat using (order_detail_id)
     left join ores using (order_id)
     left join ocfs using (order_detail_id)
+    left join tfrro on ocd.order_detail_id = tfrro.new_order_detail_id
     left join rrbc using (order_id, reschedule_passenger_id)
     left join ocf_reschedule using (flight_reschedule_old_order_detail_id)
     left join wmpc on wmpc.payment_type_bank = replace(coalesce(fpm2.payment_type_bank, fpm.payment_type_bank),' ','_') and wmpc.installment = oc.cc_installment and date(oc.payment_timestamp) between wmpc.start_date and coalesce(wmpc.end_date,current_date())
