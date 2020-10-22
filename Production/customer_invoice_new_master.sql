@@ -42,9 +42,15 @@ lsw as (
     , [
       struct(
         revenue_category as revenue_category
-        , cogs as extended_amount
+        , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then flexi_fare_diff
+          else cogs 
+          end as extended_amount
         , quantity as quantity
-        , safe_divide(cogs,quantity) as selling_price
+        , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then safe_divide(flexi_fare_diff,quantity)
+          else safe_divide(cogs,quantity) 
+          end as selling_price
         , authentication_code as authentication_code
         , virtual_account as virtual_account
         , giftcard_voucher as giftcard_voucher
@@ -120,6 +126,7 @@ lsw as (
         , supplier
         , memo_product as memo
         , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then 0
             when commission <> 0 then 1
             else 0
           end as valid_struct_flag
@@ -260,10 +267,31 @@ lsw as (
         , supplier_reschedule_flight as supplier
         , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
         , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then 0
             when refund_deposit_value < 0 then 1
             else 0
           end as valid_struct_flag
         , 11 as order_for_workday
+      )
+      , struct(
+        'Reschedule_fee' as revenue_category
+        , flexi_reschedule_fee as extended_amount
+        , 1 as quantity
+        , flexi_reschedule_fee as selling_price
+        , null as authentication_code
+        , null as virtual_account
+        , null as giftcard_voucher
+        , null as promocode_name
+        , null as booking_code
+        , null as ticket_number
+        , product_provider_reschedule_flight as product_provider
+        , supplier_reschedule_flight as supplier
+        , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
+        , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 and flexi_reschedule_fee > 0 then 1
+            else 0
+          end as valid_struct_flag
+        , 12 as order_for_workday
       )
       , struct(
         'Reschedule_Fee' as revenue_category
@@ -283,7 +311,7 @@ lsw as (
             when reschedule_fee_flight > 0 then 1
             else 0
           end as valid_struct_flag
-        , 12 as order_for_workday
+        , 13 as order_for_workday
       )
       , struct(
         'Refund_Payable' as revenue_category
@@ -303,7 +331,7 @@ lsw as (
             when reschedule_cashback_amount > 0 then 1
             else 0
           end as valid_struct_flag
-        , 13 as order_for_workday
+        , 14 as order_for_workday
       )
       , struct(
         'Miscellaneous_Expense' as revenue_category
@@ -323,7 +351,7 @@ lsw as (
             when reschedule_miscellaneous_amount > 0 then 1
             else 0
           end as valid_struct_flag
-        , 14 as order_for_workday
+        , 15 as order_for_workday
       )
       , struct(
         'Promocode' as revenue_category
@@ -343,7 +371,7 @@ lsw as (
             when reschedule_promocode_amount <> 0 then 1
             else 0
           end as valid_struct_flag
-        , 15 as order_for_workday
+        , 16 as order_for_workday
       )
       , struct(
         'Rebooking_Sales' as revenue_category
@@ -363,7 +391,7 @@ lsw as (
             when rebooking_sales_hotel != 0 then 1
             else 0
           end as valid_struct_flag
-        , 16 as order_for_workday
+        , 17 as order_for_workday
       )
       , struct(
         'TixPoint_Disc' as revenue_category
@@ -383,7 +411,7 @@ lsw as (
             when tiketpoint_value < 0 then 1
             else 0
           end as valid_struct_flag
-        , 17 as order_for_workday
+        , 18 as order_for_workday
       )
       , struct(
         'Bank_Charges' as revenue_category
@@ -403,7 +431,7 @@ lsw as (
             when payment_charge <= 0 and payment_charge+pg_charge != 0 then 1
             else 0
           end as valid_struct_flag
-        , 18 as order_for_workday
+        , 19 as order_for_workday
       )
       , struct(
         'Bank_Charges' as revenue_category
@@ -423,7 +451,7 @@ lsw as (
             when payment_charge > 0 and cc_installment = 0 then 1
             else 0
           end as valid_struct_flag
-        , 19 as order_for_workday
+        , 20 as order_for_workday
       )
       , struct(
         'Installment' as revenue_category
@@ -443,7 +471,7 @@ lsw as (
             when cc_installment > 0 and payment_charge > 0 then 1
             else 0
           end as valid_struct_flag
-        , 20 as order_for_workday
+        , 21 as order_for_workday
       )
       , struct(
         'Gateway_Charges' as revenue_category
@@ -463,7 +491,7 @@ lsw as (
             when pg_charge > 0 and cc_installment >= 0 and payment_charge <= 0 then 1
             else 0
           end as valid_struct_flag
-        , 21 as order_for_workday
+        , 22 as order_for_workday
       )
       , struct(
         'Rapid_Test' as revenue_category
@@ -491,7 +519,7 @@ lsw as (
             when is_has_halodoc_flag > 0 and halodoc_sell_price_amount > 0 then 1
             else 0
           end as valid_struct_flag
-        , 22 as order_for_workday
+        , 23 as order_for_workday
       )
       , struct(
         'Convenience_Fee' as revenue_category
@@ -511,7 +539,7 @@ lsw as (
             when convenience_fee_amount > 0  then 1
             else 0
           end as valid_struct_flag
-        , 23 as order_for_workday
+        , 24 as order_for_workday
       )
        , struct(
         'Rebooking_Sales' as revenue_category
@@ -531,7 +559,7 @@ lsw as (
             when is_rebooking_flag > 0 and diff_amount_rebooking < 0  then 1
             else 0
           end as valid_struct_flag
-        , 24 as order_for_workday
+        , 25 as order_for_workday
       )
       , struct(
         'Refund_Payable' as revenue_category
@@ -551,7 +579,7 @@ lsw as (
             when is_rebooking_flag > 0 and diff_amount_rebooking > 0 then 1
             else 0
           end as valid_struct_flag
-        , 25 as order_for_workday
+        , 26 as order_for_workday
       )
     ] as info_array
   from tr
@@ -561,6 +589,13 @@ lsw as (
     and is_sent_flag is null
     and event_data_error_flag = 0 
     and pay_at_hotel_flag = 0 
+    and (
+          not is_flexi_reschedule
+          or (
+               is_flexi_reschedule
+               and flexi_fare_diff>0
+             )
+        )
     and 
       (
         new_supplier_flag = 1
@@ -646,6 +681,13 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     and is_sent_flag is null
     and event_data_error_flag = 0 
     and pay_at_hotel_flag = 0 
+    and (
+          not is_flexi_reschedule
+          or (
+               is_flexi_reschedule
+               and flexi_fare_diff>0
+             )
+        )
     and 
       (
         new_supplier_flag = 1
@@ -685,7 +727,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         , supplier
         , memo_product as memo
         , 1 as valid_struct_flag
-        , 21 as order_for_workday
+        , 22 as order_for_workday
       )
       , struct(
         add_ons_commission_revenue_category as revenue_category
@@ -702,7 +744,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         , supplier
         , memo_product as memo
         , 1 as valid_struct_flag
-        , 22 as order_for_workday
+        , 23 as order_for_workday
       )
     ] as info_array
   from
@@ -778,6 +820,13 @@ select
     and is_sent_flag is null
     and event_data_error_flag = 0 
     and pay_at_hotel_flag = 0 
+    and (
+          not is_flexi_reschedule
+          or (
+               is_flexi_reschedule
+               and flexi_fare_diff>0
+             )
+        )
     and 
       (
         new_supplier_flag = 1

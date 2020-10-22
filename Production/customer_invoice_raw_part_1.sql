@@ -716,7 +716,7 @@ wsr_id as (
     (
       select 
         order_detail_id
-        , json_extract_scalar(fij,'$.flexi') as is_flexi
+        , safe_cast(json_extract_scalar(fij,'$.flexi') as bool) as is_flexi
         , row_number() over(partition by order_detail_id) as rn
       from 
         `datamart-finance.staging.v_order__cart_flight_segment`
@@ -735,6 +735,8 @@ wsr_id as (
     , ro.newOrder.orderId as new_order_id
     , rof.orderDetailId as new_order_detail_id
     , rof.fareDetail.fareDiff as fare_diff
+    , rof.fareDetail.taxDiff as tax_diff
+    , rof.fareDetail.additionalIncomeDiff reschedule_fee
   from 
     `datamart-finance.staging.v_tix_flight_reschedule__reschedule_order` ro
     , unnest(newOrder.orderDetail) as rof
@@ -1606,8 +1608,12 @@ wsr_id as (
         when oar.old_id_rebooking is null then 0
         else 1 
         end as is_rebooking_flag
-    , ocfs.is_flexi as is_flexi_flight
-    , safe_cast(coalesce(tfrro.fare_diff, 0) as float64) flexi_fare_diff
+    , case
+        when ocdrd.is_reschedule = 1 and ocfs.is_flexi then true
+        else false
+        end as is_flexi_reschedule
+    , safe_cast(coalesce(tfrro.fare_diff+tfrro.tax_diff, 0) as float64) flexi_fare_diff
+    , safe_cast(coalesce(tfrro.reschedule_fee, 0) as float64) flexi_reschedule_fee
   from
     oc
     inner join ocd using (order_id)
