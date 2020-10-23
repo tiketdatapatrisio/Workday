@@ -292,6 +292,39 @@ fd as (
     )
   where rn = 1
 ) 
+, ocfs as (
+  select 
+    * except (rn)
+  from
+    (
+      select 
+        order_detail_id
+        , safe_cast(json_extract_scalar(fij,'$.flexi') as bool) as is_flexi
+        , row_number() over(partition by order_detail_id) as rn
+      from 
+        `datamart-finance.staging.v_order__cart_flight_segment`
+      left join
+          unnest (json_extract_array(flight_info_json)) as fij
+      where
+        departure_time >= (select filter1 from fd)
+        and flight_date >= (select date_add((select date(filter1) from fd), interval 1 day))  
+    )
+  where rn = 1
+)
+, tfrro as (
+  select
+    ro.orderId as old_order_id
+    , ro.orderDetailId as old_order_detail_id
+    , ro.newOrder.orderId as new_order_id
+    , rof.orderDetailId as new_order_detail_id
+    , rof.fareDetail.fareDiff as fare_diff
+    , rof.fareDetail.taxDiff as tax_diff
+    , rof.fareDetail.additionalIncomeDiff reschedule_fee
+  from 
+    `datamart-finance.staging.v_tix_flight_reschedule__reschedule_order` ro
+    , unnest(newOrder.orderDetail) as rof
+  where rescheduleStatus = 'CLOSED'
+)
 , ocf as (
   select
     distinct
@@ -710,6 +743,10 @@ fd as (
   select 
     * 
     , case 
+        when ocd.order_type = 'flight' and is_reschedule = 1 and is_flexi and fare_diff > 0 then fare_diff+tax_diff
+        else 0
+      end as flexi_flight_price
+    , case 
         when ocd.order_type in ('train') then concat(safe_cast(oc.order_id as string), ' - ', ocd.order_name_detail, ' / ', ocd.order_name)
         when ocd.order_type in ('flight') then concat(safe_cast(oc.order_id as string), ' / ', ocf.booking_code, ' - ', ocd.order_name_detail, ' / ', ocd.order_name, ' - ticket number : ', ifnull(ocf.ticket_number,'') )
         when ocd.order_type in ('tixhotel') then concat(safe_cast(oc.order_id as string), ' - ', ocd.order_name, ' / ', ocd.order_name_detail, ' - ', oth_fact.hotel_itinerarynumber)
@@ -737,6 +774,8 @@ fd as (
     left join ac on order_type in ('flight') and ocd.product_provider = ac.product_provider_ac
     left join octd using (order_detail_id)
     left join ocdrd using(order_id)
+    left join ocfs using (order_detail_id)
+    left join tfrro on ocd.order_detail_id = tfrro.new_order_detail_id
   where
     (order_type = 'flight' and ocf.ticket_status = 'issued')
     or
@@ -810,6 +849,7 @@ fd as (
         else null
       end as quantity
     , round(case
+        when string_agg(distinct order_type) = 'flight' and flexi_flight_price > 0 then flexi_flight_price
         when string_agg(distinct order_type) = 'flight' 
           then sum(round(
             case 
@@ -908,6 +948,7 @@ fd as (
   group by 
     order_id
     , order_detail_id
+    , flexi_flight_price
 )
 /* save the result of this query to temporary table -> let's agree the temporary location will be in `datamart-finance.datasource_workday.temp_supplier_invoice_raw_part_1`*/
 select * from fact_product

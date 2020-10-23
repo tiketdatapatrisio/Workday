@@ -61,6 +61,8 @@ lsw as (
         , product_provider
         , supplier
         , case
+            when revenue_category = 'Ticket' and product_category = 'Flight' and is_flexi_reschedule and flexi_fare_diff > 0 
+              then concat(memo_flight, ' / Reschedule from : ', TRIM(REGEXP_REPLACE(refund_deposit_name,'[^0-9 ]','')), ' / Flexi')
             when revenue_category = 'Room' then memo_hotel
             when revenue_category = 'Ticket' and product_category = 'Flight' then memo_flight
           else memo_product
