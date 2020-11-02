@@ -307,6 +307,10 @@ wsr_id as (
     order_id 
     , string_agg(distinct order_name) as refund_deposit_name
     , safe_cast(sum(customer_price) as float64) as refund_deposit_value
+    , case
+        when order_id is null then 0
+        else 1
+        end as is_reschedule
   from
     ocd_or
   where
@@ -1287,7 +1291,7 @@ wsr_id as (
         , fh.cogs_hotel
         , case 
             when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129') then ff.cogs_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
-            when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') then ff.cogs_flight - order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
+            when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') and ocdrd.is_reschedule is null then ff.cogs_flight - order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
             else ff.cogs_flight
           end
         , fat.cogs_airport_transfer
@@ -1314,7 +1318,7 @@ wsr_id as (
           end
         , case 
             when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129') then ff.commission_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
-            when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') then order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
+            when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') and ocdrd.is_reschedule is null then order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
             else ff.commission_flight
           end
         , 0
