@@ -906,6 +906,7 @@ wsr_id as (
     , string_agg(distinct room_source) as room_source
     , string_agg(distinct json_extract_scalar(additional_info,'$.name')) as room_source_info
     , max(created_timestamp) as created_timestamp
+    , datetime(max(booking_checkoutdate), 'Asia/Jakarta') as booking_checkoutdate
     , max(nett_price) as nett_price
     , max(booking_room) * max(booking_night) as quantity
     , max(vendor_incentive) as vendor_incentive_hotel
@@ -1023,6 +1024,7 @@ wsr_id as (
     order_id
     , itinerary_id
     , quantity as quantity_hotel
+    , booking_checkoutdate
     , case
         when room_source = 'TIKET' then hbd.cogs_native
         when room_source LIKE '%AGODA%' then case when ott.rebooking_price_hotel > 0 then ott.rebooking_price_hotel - ott.vendor_incentive_hotel else ott.nett_price - ott.vendor_incentive_hotel end
@@ -1347,6 +1349,7 @@ wsr_id as (
         , fh.product_category_hotel
         , fat.product_category_airport_transfer
       ) as product_category
+    , fh.booking_checkoutdate as hotel_checkoutdate
     , coalesce(fh.rebooking_price_hotel,0) as rebooking_price_hotel
     , coalesce(ocd.selling_price - fh.rebooking_price_hotel,0) as rebooking_sales_hotel
     , coalesce(
