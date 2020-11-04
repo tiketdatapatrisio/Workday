@@ -135,8 +135,8 @@ from
     `datamart-finance.datasource_workday.temp_customer_invoice_raw_part_1` c
     left join master_data_supplier ms on ms.Supplier_Reference_ID = c.supplier and c.payment_date >= ms.start_date and c.payment_date < ms.end_date
     left join master_data_product_provider mpp on mpp.Organization_Reference_ID = c.product_provider and c.payment_date >= mpp.start_date and c.payment_date < mpp.end_date
-   -- left join master_b2b_online_and_offline mbo on safe_cast(mbo.business_id as string) = c.customer_id and c.payment_date >= mbo.start_date and c.payment_date < mbo.end_date
-   -- left join master_b2b_corporate mbc on mbc.business_id = c.customer_id and c.payment_date >= mbc.start_date and c.payment_date < mbc.end_date
+    /*left join master_b2b_online_and_offline mbo on safe_cast(mbo.business_id as string) = c.customer_id and c.payment_date >= mbo.start_date and c.payment_date < mbo.end_date*/
+    /*left join master_b2b_corporate mbc on mbc.business_id = c.customer_id and c.payment_date >= mbc.start_date and c.payment_date < mbc.end_date */
     left join master_data_customer mco on mco.Customer_Reference_ID = c.customer_id and mco.Customer_Category_ID in('B2B Online','B2B Offline') and c.payment_date >= mco.start_date and c.payment_date < mco.end_date 
     left join master_data_customer mcc on mcc.Customer_Reference_ID = c.customer_id and mcc.Customer_Category_ID = 'B2B_Corporate' and c.payment_date >= mcc.start_date and c.payment_date < mcc.end_date 
 )

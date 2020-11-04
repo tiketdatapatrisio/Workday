@@ -45,7 +45,7 @@ fd as (
     detail_id as detail_event_id
     , string_agg(distinct supplier_id) as supplier_id
     , string_agg(distinct supplier_name) as supplier_name
-    , string_agg(distinct event_name) as event_name --Update by Rizki Habibie @2020, 18th of August
+    , string_agg(distinct event_name) as event_name /*Update by Rizki Habibie @2020, 18th of August*/
     , string_agg(distinct event_type) as event_type
     , string_agg(distinct ext_source) as ext_source_event
     , string_agg(distinct event_category) as event_category
@@ -68,7 +68,7 @@ fd as (
     , ext_source_event
     , case
         when event_category = 'HOTEL' then 'Hotel'
-        when lower(event_name) LIKE'%sewa mobil%' AND event_category='TRANSPORT' then 'Car' --Update by Rizki Habibie @2020, 18th of August
+        when lower(event_name) LIKE'%sewa mobil%' AND event_category='TRANSPORT' then 'Car' /*Update by Rizki Habibie @2020, 18th of August*/
         when event_type in ('D') then 'Attraction'
         when event_type in ('E') then 'Activity'
         when event_type not in ('D','E') then 'Event'
@@ -789,7 +789,7 @@ fd as (
       ELSE
         (name_name)
       END,'©',''),'®',''),'™',''),'°',''),'–','-'),'‘',"'"),'’',"'"),'“','"'),'”','"'),'¬†','')) as country_name
-    , case --Mapping from country name into country code (ISO 3166-1 alpha-2)
+    , case /*Mapping from country name into country code (ISO 3166-1 alpha-2)*/
         when _id = '5b73b922e1b2236ea6462402' then 'ID'
         when _id = '5b73ba73e1b2236ea6473e83' then 'VN'
         when _id = '5b73ba75e1b2236ea6473ec4' then 'JP'

@@ -16,7 +16,7 @@ with
   from 
     `datamart-finance.datasource_workday.master_data_customer`
 )
--- b2b_corporate - start --
+/* b2b_corporate - start */
 , vc as (
 select
   distinct(workday_business_id) as workday_business_id
@@ -96,10 +96,10 @@ from
   left join ms on vc.workday_business_id = ms.Customer_Reference_ID 
   where ms.Customer_Reference_ID is null )
 where rn = 1  
-  -- b2b corporate - end --
+  /* b2b corporate - end */
 )
 
--- b2b online and offline - start
+/* b2b online and offline - start */
 , oc as (
   select
     distinct
@@ -130,9 +130,9 @@ where rn = 1
     , '' as credit_limit_amount
     , 'TAX_CODE-6-1' as tax_default_tax_code
     , '' as tax_id_npwp
-    , '' as tax_id_type -- if npwp true IDN-NPWP
-    , '' as transaction_tax_yn -- if npwp true Y
-    , '' as primary_tax_yn -- if npwp true Y
+    , '' as tax_id_type 
+    , '' as transaction_tax_yn 
+    , '' as primary_tax_yn 
     , case
         when business_address1<>'' then '2020-01-01'
         when business_address1='null' then ''

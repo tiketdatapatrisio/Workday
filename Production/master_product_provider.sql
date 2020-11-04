@@ -63,7 +63,7 @@ fd as (
       end as product_provider_name
     , case
         when event_category = 'HOTEL' then 'Hotel'
-        when lower(product_provider_name) like ('%sewa mobil%') and event_category='TRANSPORT' then 'Car' --TTD car
+        when lower(product_provider_name) like ('%sewa mobil%') and event_category='TRANSPORT' then 'Car' /* TTD car */
         when event_type in ('D') then 'Attraction'
         when event_type in ('E') then 'Activity'
         when event_type not in ('D','E') then 'Event'
@@ -149,7 +149,7 @@ fd as (
 , combine as (
   select
     distinct
-    coalesce(oecm.product_provider_id, occar.product_provider_id, oth.product_provider_id, safe_cast(ocd.order_master_id as string)) as Organization_Reference_ID -- product_provider_id /* Change column for the new data template */
+    coalesce(oecm.product_provider_id, occar.product_provider_id, oth.product_provider_id, safe_cast(ocd.order_master_id as string)) as Organization_Reference_ID 
     , replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(CASE
       WHEN REGEXP_CONTAINS(LOWER(trim(coalesce(oecm.product_provider_name, occar.product_provider_name, oth.product_provider_name, ac.airlines_real_name))), r"[àáâäåæçèéêëìíîïòóôöøùúûüÿœ]") THEN
         REGEXP_REPLACE(
@@ -175,9 +175,9 @@ fd as (
         r"[ÀÁÂÄÅ]", 'A')
       ELSE
         trim(coalesce(oecm.product_provider_name, occar.product_provider_name, oth.product_provider_name, ac.airlines_real_name))
-      END,'©',''),'®',''),'™',''),'°',''),'–','-'),'‘',"'"),'’',"'"),'“','"'),'”','"'),'¬†','') as Product_Provider_Name -- product_provider_name /* Change column for the new data template */
+      END,'©',''),'®',''),'™',''),'°',''),'–','-'),'‘',"'"),'’',"'"),'“','"'),'”','"'),'¬†','') as Product_Provider_Name  /* Change column for the new data template */
     , coalesce(oecm.product_category, occar.product_category, oth.product_category, ac.flight_product_category) as Product_Provider_Hierarchy /* Add column for the new data template */
-    , coalesce(oecm.product_category, occar.product_category, oth.product_category, ac.flight_product_category) as Product_Category -- product_category /* Change column for the new data template */
+    , coalesce(oecm.product_category, occar.product_category, oth.product_category, ac.flight_product_category) as Product_Category /* Change column for the new data template */
     , max(payment_datetime) as max_payment_datetime
   from
     oc
@@ -194,7 +194,7 @@ fd as (
 , add_row_number as (
   select
     *
-    , row_number() over(partition by Organization_Reference_ID -- product_provider_id 
+    , row_number() over(partition by Organization_Reference_ID
     order by max_payment_datetime desc) as rn
   from
     combine
