@@ -604,7 +604,7 @@ select
         else '' end as string) as deposit_rev_category
     , '' as intercompany
     , case
-        when customer_id = '34272813' then safe_cast(hotel_checkoutdate as string)
+        when customer_id in ('34272813', '32545767') then safe_cast(hotel_checkoutdate as string)
         else '' end as due_date_override
     , info_array.order_for_workday as order_by_for_workday
 from
@@ -745,7 +745,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         else '' end as string) as deposit_rev_category
     , '' as intercompany
     , case
-        when customer_id = '34272813' then safe_cast(hotel_checkoutdate as string)
+        when customer_id in ('34272813', '32545767') then safe_cast(hotel_checkoutdate as string)
         else '' end as due_date_override
     , info_array.order_for_workday as order_by_for_workday
   from
@@ -867,7 +867,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         else '' end as string) as deposit_rev_category
     , '' as intercompany
     , case
-        when customer_id = '34272813' then safe_cast(hotel_checkoutdate as string)
+        when customer_id in ('34272813', '32545767') then safe_cast(hotel_checkoutdate as string)
         else '' end as due_date_override
     , info_array.order_for_workday as order_by_for_workday
   from

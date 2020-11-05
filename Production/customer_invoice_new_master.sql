@@ -39,6 +39,7 @@ lsw as (
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , [
       struct(
         revenue_category as revenue_category
@@ -599,11 +600,14 @@ select
     , payment_gateway as payment_gateway
     , payment_type_bank as payment_type_bank
     , info_array.memo as memo
-    , coalesce(concat('"',safe_cast(case
+    , safe_cast(case
         when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
         when customer_type = 'B2B Online' and customer_id not in ('33918862', '34276356', '34272813') then 'Deposit_B2B_Online'
-        else '' end as string),'"'),'""') as deposit_rev_category
-    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+        else '' end as string) as deposit_rev_category
+    , '' as intercompany
+    , case
+        when customer_id in ('34272813', '32545767') then safe_cast(hotel_checkoutdate as string)
+        else '' end as due_date_override
     , info_array.order_for_workday as order_by_for_workday
 from
   info
@@ -634,6 +638,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     , booking_code
     , ticket_number
     , memo_product
+    , hotel_checkoutdate
     , add_ons.add_ons_revenue_category
     , add_ons.add_ons_commission_revenue_category
     , add_ons.add_ons_hotel_quantity
@@ -674,6 +679,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , [
       struct(
         add_ons_revenue_category as revenue_category
@@ -738,11 +744,14 @@ select
     , payment_gateway as payment_gateway
     , payment_type_bank as payment_type_bank
     , info_array.memo as memo
-    , coalesce(concat('"',safe_cast(case
+    , safe_cast(case
         when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
         when customer_type = 'B2B Online' and customer_id not in ('33918862', '34276356', '34272813') then 'Deposit_B2B_Online'
-        else '' end as string),'"'),'""') as deposit_rev_category
-    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+        else '' end as string) as deposit_rev_category
+    , '' as intercompany
+    , case
+        when customer_id in ('34272813', '32545767') then safe_cast(hotel_checkoutdate as string)
+        else '' end as due_date_override
     , info_array.order_for_workday as order_by_for_workday
   from
     info_add_ons
@@ -765,6 +774,7 @@ select
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , authentication_code
     , virtual_account
     , giftcard_voucher
@@ -811,6 +821,7 @@ select
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , [
       struct(
         'Insurance' as revenue_category
@@ -858,11 +869,14 @@ select
     , payment_gateway as payment_gateway
     , payment_type_bank as payment_type_bank
     , info_array.memo as memo
-    , coalesce(concat('"',safe_cast(case
+    , safe_cast(case
         when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
         when customer_type = 'B2B Online' and customer_id not in ('33918862', '34276356', '34272813') then 'Deposit_B2B_Online'
-        else '' end as string),'"'),'""') as deposit_rev_category
-    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+        else '' end as string) as deposit_rev_category
+    , '' as intercompany
+    , case
+        when customer_id in ('34272813', '32545767') then safe_cast(hotel_checkoutdate as string)
+        else '' end as due_date_override
     , info_array.order_for_workday as order_by_for_workday
   from
     info_flight_multi_insurance
