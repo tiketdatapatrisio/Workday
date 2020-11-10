@@ -11,33 +11,33 @@ fd as (
        timestamp_add(timestamp(date(current_timestamp(),'Asia/Jakarta')), interval -79 hour) as filter1
   )
 )
-, master_supplier as (
+, master_data_supplier as (
   select
     * except(processed_date)
   , case 
-      when lead(date_add(processed_date, interval -1 day)) over(partition by supplier_id order by processed_date desc) is null
+      when lead(date_add(processed_date, interval -1 day)) over(partition by Supplier_Reference_ID order by processed_date desc) is null
         then date('2000-01-01')
       else date_add(processed_date, interval -1 day)
     end as start_date
   , date_add(processed_date, interval -1 day) as active_date
-  , coalesce(lag(date_add(processed_date, interval -2 day)) over(partition by supplier_id order by processed_date desc), date('2099-12-31')) as end_date
+  , coalesce(lag(date_add(processed_date, interval -2 day)) over(partition by Supplier_Reference_ID order by processed_date desc), date('2099-12-31')) as end_date
 from
-    `datamart-finance.datasource_workday.master_supplier`
+    `datamart-finance.datasource_workday.master_data_supplier`
 )
-, master_product_provider as (
+, master_data_product_provider as (
   select
     * except(processed_date)
   , case 
-      when lead(date_add(processed_date, interval -1 day)) over(partition by product_provider_id order by processed_date desc) is null
+      when lead(date_add(processed_date, interval -1 day)) over(partition by Organization_Reference_ID order by processed_date desc) is null
         then date('2000-01-01')
       else date_add(processed_date, interval -1 day)
     end as start_date
   , date_add(processed_date, interval -1 day) as active_date
-  , coalesce(lag(date_add(processed_date, interval -2 day)) over(partition by product_provider_id order by processed_date desc), date('2099-12-31')) as end_date
+  , coalesce(lag(date_add(processed_date, interval -2 day)) over(partition by Organization_Reference_ID order by processed_date desc), date('2099-12-31')) as end_date
 from
-    `datamart-finance.datasource_workday.master_product_provider`
+    `datamart-finance.datasource_workday.master_data_product_provider`
 )
-, master_b2b_corporate as (
+/*, master_b2b_corporate as ( -- merged to master_data_customer, Nov 2020
   select
     * except(processed_date)
   , case 
@@ -62,6 +62,19 @@ from
   , coalesce(lag(date_add(processed_date, interval -2 day)) over(partition by business_id order by processed_date desc), date('2099-12-31')) as end_date
 from
     `datamart-finance.datasource_workday.master_b2b_online_and_offline`
+)*/
+, master_data_customer as (
+  select
+    * except(processed_date)
+  , case 
+      when lead(date_add(processed_date, interval -1 day)) over(partition by Customer_Reference_ID order by processed_date desc) is null
+        then date('2000-01-01')
+      else date_add(processed_date, interval -1 day)
+    end as start_date
+  , date_add(processed_date, interval -1 day) as active_date
+  , coalesce(lag(date_add(processed_date, interval -2 day)) over(partition by Customer_Reference_ID order by processed_date desc), date('2099-12-31')) as end_date
+from
+    `datamart-finance.datasource_workday.master_data_customer`
 )
 , fact as (
   select
@@ -95,15 +108,15 @@ from
     , case
         when c.customer_type in ('B2B Online','B2B Offline') then
           case
-            when mbo.active_date >= c.payment_date or mbo.active_date is null then 1
+            when mco.active_date >= c.payment_date or mco.active_date is null then 1
             else 0
           end
         else 0
       end as new_b2b_online_and_offline_flag
     , case
-        when c.customer_type = 'B2C Corporate' then
+        when c.customer_type = 'B2B Corporate' then
           case
-            when mbc.active_date >= c.payment_date or mbc.active_date is null then 1
+            when mcc.active_date >= c.payment_date or mcc.active_date is null then 1
             else 0
           end
         else 0
@@ -120,10 +133,12 @@ from
       end as is_amount_valid_flag
   from
     `datamart-finance.datasource_workday.temp_customer_invoice_raw_part_1` c
-    left join master_supplier ms on ms.supplier_id = c.supplier and c.payment_date >= ms.start_date and c.payment_date < ms.end_date
-    left join master_product_provider mpp on mpp.product_provider_id = c.product_provider and c.payment_date >= mpp.start_date and c.payment_date < mpp.end_date
-    left join master_b2b_online_and_offline mbo on safe_cast(mbo.business_id as string) = c.customer_id and c.payment_date >= mbo.start_date and c.payment_date < mbo.end_date
-    left join master_b2b_corporate mbc on mbc.business_id = c.customer_id and c.payment_date >= mbc.start_date and c.payment_date < mbc.end_date
+    left join master_data_supplier ms on ms.Supplier_Reference_ID = c.supplier and c.payment_date >= ms.start_date and c.payment_date < ms.end_date
+    left join master_data_product_provider mpp on mpp.Organization_Reference_ID = c.product_provider and c.payment_date >= mpp.start_date and c.payment_date < mpp.end_date
+    /*left join master_b2b_online_and_offline mbo on safe_cast(mbo.business_id as string) = c.customer_id and c.payment_date >= mbo.start_date and c.payment_date < mbo.end_date*/
+    /*left join master_b2b_corporate mbc on mbc.business_id = c.customer_id and c.payment_date >= mbc.start_date and c.payment_date < mbc.end_date */
+    left join master_data_customer mco on mco.Customer_Reference_ID = c.customer_id and mco.Customer_Category_ID in('B2B Online','B2B Offline') and c.payment_date >= mco.start_date and c.payment_date < mco.end_date 
+    left join master_data_customer mcc on mcc.Customer_Reference_ID = c.customer_id and mcc.Customer_Category_ID = 'B2B_Corporate' and c.payment_date >= mcc.start_date and c.payment_date < mcc.end_date 
 )
 , tr as (
   select 
