@@ -196,12 +196,28 @@ wsr_id as (
     distinct
     order_id
     , payment_source
-    , payment_amount
+    , payment_amount+extra_fee payment_amount
   from
     `datamart-finance.staging.v_order__payment`
   where
     payment_id = 1
     and payment_flag = 1
+    and payment_timestamp >= (select filter2 from fd)
+    and payment_timestamp < (select filter3 from fd)
+)
+, ops as (
+  select
+    order_id
+    , is_main_payment
+    , payment_source order_type
+    , payment_name order_name
+    , payment_name_detail order_name_detail
+    , payment_amount customer_price
+    , extra_fee
+  from 
+    `datamart-finance.staging.v_order__payment`
+  where
+    data_source = 'spanner'
     and payment_timestamp >= (select filter2 from fd)
     and payment_timestamp < (select filter3 from fd)
 )
@@ -264,6 +280,15 @@ wsr_id as (
   where
     order_type in ('payment')
   group by 1
+  union distinct
+  select
+    order_id 
+    , string_agg(order_name) as payment_order_name
+    , safe_cast(sum(extra_fee) as float64) as payment_charge
+  from
+    ops
+  where is_main_payment
+  group by 1
 )
 , ocdgv as (
   select
@@ -280,6 +305,19 @@ wsr_id as (
   where
     order_type in ('giftcard')
   group by 1
+  union distinct
+  select
+    order_id 
+    , string_agg(distinct order_name) as giftvoucher_name
+    , safe_cast(sum(customer_price*-1) as float64) as giftvoucher_value
+    , string_agg(giftcard_voucher) as giftcard_voucher
+    , string_agg(distinct giftcard_voucher_purpose) as giftcard_voucher_purpose
+    , string_agg(distinct giftcard_voucher_user_email_reference_id) as giftcard_voucher_user_email_reference_id
+  from
+    ops
+    left join tix_gcc using (order_id)
+  where order_type = 'giftcard'
+  group by 1
 )
 , ocdpc as (
   select
@@ -291,6 +329,15 @@ wsr_id as (
   where
     order_type in ('promocode')
   group by 1
+  union distinct
+  select
+    order_id
+    , string_agg(distinct order_name) as promocode_name
+    , safe_cast(sum(customer_price*-1) as float64) as promocode_value
+  from
+    ops
+  where order_type = 'promocode'
+  group by 1
 )
 , ocdtp as (
   select 
@@ -300,6 +347,14 @@ wsr_id as (
     ocd_or
   where
     order_type in ('tiketpoint')
+  group by 1
+  union distinct
+  select
+    order_id 
+    , safe_cast(sum(customer_price*-1) as float64) as tiketpoint_value
+  from
+    ops
+  where order_type = 'tiketpoint'
   group by 1
 )
 , ocdrd as (
@@ -1161,11 +1216,11 @@ wsr_id as (
     , occ.auth_code as authentication_code
     , onp.virtual_account
     , case
-        when ocd.order_type in ('tixhotel','hotel','flight','car','train','event') then trim(ocdgv.giftcard_voucher)
+        when ocd.order_type in ('tixhotel','hotel','flight','car','train','event','airport_transfer') then trim(ocdgv.giftcard_voucher)
         else null
       end as giftcard_voucher
     , case
-        when ocd.order_type in ('tixhotel','hotel','flight','car','train','event') then trim(ocdpc.promocode_name)
+        when ocd.order_type in ('tixhotel','hotel','flight','car','train','event','airport_transfer') then trim(ocdpc.promocode_name)
         else null
       end as promocode_name
     , op.payment_source as payment_source
