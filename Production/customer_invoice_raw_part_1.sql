@@ -628,7 +628,7 @@ wsr_id as (
     , case
         when oecm.event_category = 'HOTEL' then 'Hotel'
         when oecm.event_name like ('Airport Transfer%') then 'Car'
-        when lower(oecm.event_name) like ('sewa mobil%') and oecm.event_category = 'TRANSPORT' then 'Car' --TTD car
+        when lower(oecm.event_name) like ('%sewa mobil%') and oecm.event_category = 'TRANSPORT' then 'Car' --TTD car
         when oecm.event_name like ('Tix-Spot Airport Lounge%') then 'Others'
         when lower(oecm.event_name) like ('%railink%') then 'Train'
         when oecm.event_type in ('D') then 'Attraction'
