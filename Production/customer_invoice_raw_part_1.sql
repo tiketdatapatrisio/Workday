@@ -650,7 +650,7 @@ wsr_id as (
         when oecm.event_category = 'HOTEL' then 'Hotel_Voucher'
         when oecm.event_name like ('Airport Transfer%') then 'Shuttle'
         when oecm.event_name like ('Tix-Spot Airport Lounge%') then 'Lounge'
-        when lower(oecm.event_name) like ('sewa mobil%') and oecm.event_category = 'TRANSPORT' then 'Shuttle' --TTD car
+        when lower(oecm.event_name) like ('%sewa mobil%') and oecm.event_category = 'TRANSPORT' then 'Shuttle' --TTD car
         else 'Ticket'
       end as revenue_category_event
   from 
