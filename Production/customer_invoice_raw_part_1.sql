@@ -910,11 +910,18 @@ wsr_id as (
     )
   where rn = 1
 )
+, ocdis as (
+  select 
+    order_detail_id
+    , coalesce(customer_price, 0) as discount_amount
+  from `datamart-finance.staging.v_order__discount` 
+) 
 , fact_flight as (
   select
     order_detail_id
     , quantity_flight
     , subsidy_flight * -1 as subsidy_flight
+    , discount_amount as subsidy_discount
     , cogs_flight
     , cogs_price_nta_flight
     , commission_flight
@@ -940,6 +947,7 @@ wsr_id as (
     left join ocbap using (halodoc_order_detail_id)
     left join ocdba using (halodoc_order_detail_id)
     left join ocfc using (order_detail_id)
+    left join ocdis using (order_detail_id)
     
 )
 
@@ -1390,7 +1398,11 @@ wsr_id as (
         ft.subsidy_train
         , fc.subsidy_car
         , fe.subsidy_event
-        , ff.subsidy_flight
+        , case 
+            when ff.subsidy_flight <> 0 then ff.subsidy_flight
+            when ff.subsidy_discount <> 0 then subsidy_discount
+            else null
+          end  
         , fh.subsidy_hotel
         , 0
       ) as subsidy
