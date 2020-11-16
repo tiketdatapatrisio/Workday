@@ -196,7 +196,7 @@ wsr_id as (
     distinct
     order_id
     , payment_source
-    , payment_amount+extra_fee payment_amount
+    , payment_amount + coalesce(extra_fee,0) as payment_amount
   from
     `datamart-finance.staging.v_order__payment`
   where
