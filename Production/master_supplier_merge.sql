@@ -46,4 +46,11 @@ with
       , date(current_timestamp(),'Asia/Jakarta') as processed_date 
     from `datamart-finance.datasource_workday.master_supplier`
  )
-select * from ms_old
+, base as(
+select *, row_number() over(partition by Supplier_Reference_ID order by processed_date desc) row_num
+from ms_old
+)
+
+select * except(row_num)
+from base
+where row_num=1

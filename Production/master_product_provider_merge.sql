@@ -8,4 +8,11 @@ with
      , processed_date 
     from `datamart-finance.datasource_workday.master_product_provider`
   )
-select * from mpp_old
+, base as(
+select *, row_number() over(partition by Organization_Reference_ID order by processed_date desc) row_num
+from mpp_old
+)
+
+select * except(row_num)
+from base
+where row_num=1

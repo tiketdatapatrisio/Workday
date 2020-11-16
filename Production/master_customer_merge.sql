@@ -60,4 +60,11 @@ with
     union all
     select * from b2b_online_offline
   )
-select * from group_customer
+, base as(
+select *, row_number() over(partition by Customer_Reference_ID order by processed_date desc) row_num
+from group_customer
+)
+
+select * except(row_num)
+from base
+where row_num=1
