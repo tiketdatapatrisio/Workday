@@ -43,7 +43,7 @@ with
       , hotel_account_number  as Supplier_Bank_Account_Number
       , hotel_account_holder_name  as Supplier_Bank_Account_Name
       , ""  as Supplier_Bank_BIC_SWIFT_Code
-      , date(current_timestamp(),'Asia/Jakarta') as processed_date 
+      , processed_date 
     from `datamart-finance.datasource_workday.master_supplier`
  )
 , base as(
