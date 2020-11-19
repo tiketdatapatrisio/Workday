@@ -889,6 +889,24 @@ wsr_id as (
 )
 
 /* Fact Hotel */
+, h_prop as ( --New product category 'Hotel NHA' for non Hotel product
+  select
+    distinct
+    publicId as public_id
+    , hcp.name_en as property_type
+    , case
+        when lower(hcp.name_en) = 'hotel' 
+          or lower(hcp.name_en) = 'hotel-unknown'
+          or lower(hcp.name_en) = 'resort'
+          or lower(hcp.name_en) = 'conference establishment'
+          then 'hotel'
+        else 'nha'
+      end as property_category
+  from 
+    `staging.v_hotel_core_hotel_neat` hn
+    left join `datamart-finance.staging.v_hotel_core_property_type_flat` hcp
+      on hn.propertyTypeId = safe_cast(hcp._id as int64)
+)
 , master_category_add_ons as (
   select
     add_ons_name as category_code
@@ -1070,13 +1088,17 @@ wsr_id as (
     , coalesce(total_add_ons_hotel_sell_price_amount,0) as total_add_ons_hotel_sell_price_amount
     , coalesce(total_add_ons_hotel_commission_amount,0) as total_add_ons_hotel_commission_amount
     , 'Room' as revenue_category_hotel
-    , 'Hotel' as product_category_hotel
+    , case
+        when h_prop.property_category = 'nha' then 'Hotel_NHA'
+        else 'Hotel'
+      end as product_category_hotel
   from
     ott
     left join hb using (itinerary_id)
     left join hbd using (itinerary_id)
     left join hbao_array using (itinerary_id)
     left join hbao_sum using (itinerary_id)
+    left join h_prop on ott.hotel_id_oth = h_prop.public_id
 )
 /* Fact Airport Trasfer */
 , apt as (

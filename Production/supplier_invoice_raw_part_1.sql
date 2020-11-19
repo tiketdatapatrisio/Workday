@@ -483,6 +483,24 @@ fd as (
     left join decm using (detail_event_id)
     left join event_order eo using (order_id)
 )
+, h_prop as ( --New product category 'Hotel NHA' for non Hotel product
+  select
+    distinct
+    publicId as public_id
+    , hcp.name_en as property_type
+    , case
+        when lower(hcp.name_en) = 'hotel' 
+          or lower(hcp.name_en) = 'hotel-unknown'
+          or lower(hcp.name_en) = 'resort'
+          or lower(hcp.name_en) = 'conference establishment'
+          then 'hotel'
+        else 'nha'
+      end as property_category
+  from 
+    `staging.v_hotel_core_hotel_neat` hn
+    left join `datamart-finance.staging.v_hotel_core_property_type_flat` hcp
+      on hn.propertyTypeId = safe_cast(hcp._id as int64)
+)
 , master_category_add_ons as (
   select
     add_ons_name as category_code
@@ -599,6 +617,7 @@ fd as (
           end
       end as product_provider_hotel
     , hotel_id_oth
+    , property_category
     , case
         when room_source = 'TIKET' then net_rate_currency
         else 'IDR'
@@ -627,6 +646,7 @@ fd as (
     left join hbd using (hotel_itinerarynumber)
     left join hpt using (hotel_id)
     left join hbao_array using (hotel_itinerarynumber)
+    left join h_prop on oth.hotel_id_oth = h_prop.public_id
 )
 , bp as (
   select
@@ -844,6 +864,7 @@ fd as (
       end as booking_code
     , case
         when string_agg(distinct order_type) = 'flight' then 'Flight'
+        when string_agg(distinct order_type) = 'tixhotel' and string_agg(property_category) = 'nha' then 'Hotel_NHA'
         when string_agg(distinct order_type) = 'tixhotel' then 'Hotel'
         when string_agg(distinct order_type) = 'car' then 'Car'
         when string_agg(distinct order_type) = 'train' then 'Train'
