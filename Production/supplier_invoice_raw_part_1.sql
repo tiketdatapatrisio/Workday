@@ -490,8 +490,10 @@ fd as (
     , hcp.name_en as property_type
     , case
         when lower(hcp.name_en) = 'hotel' 
-          or lower(hcp.name_en) = 'hotel-unknown'
           or lower(hcp.name_en) = 'resort'
+          or lower(hcp.name_en) = 'love hotel'
+          or lower(hcp.name_en) = 'hotel-unknown'
+          or lower(hcp.name_en) = 'heritage hotel'
           or lower(hcp.name_en) = 'conference establishment'
           then 'hotel'
         else 'nha'
