@@ -908,6 +908,8 @@ wsr_id as (
     `staging.v_hotel_core_hotel_neat` hn
     left join `datamart-finance.staging.v_hotel_core_property_type_flat` hcp
       on hn.propertyTypeId = safe_cast(hcp._id as int64)
+  where hn.isActive = 1  
+  and hn.isDeleted = 0
 )
 , master_category_add_ons as (
   select
