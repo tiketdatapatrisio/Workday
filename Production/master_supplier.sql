@@ -40,13 +40,13 @@ fd as (
   group by
     1,2,3,4
 )
-, decm as (
+/*, decm as ( -- moved to ms (eventorder) / 7 Jan 2021
   select
     detail_id as detail_event_id
     , string_agg(distinct supplier_id) as supplier_id
     , string_agg(distinct supplier_name) as supplier_name
     , string_agg(distinct event_name) as event_name /*Update by Rizki Habibie @2020, 18th of August*/
-    , string_agg(distinct event_type) as event_type
+    /*, string_agg(distinct event_type) as event_type
     , string_agg(distinct ext_source) as ext_source_event
     , string_agg(distinct event_category) as event_category
   from
@@ -69,7 +69,7 @@ fd as (
     , case
         when event_category = 'HOTEL' then 'Hotel'
         when lower(event_name) LIKE'%sewa mobil%' AND event_category='TRANSPORT' then 'Car' /*Update by Rizki Habibie @2020, 18th of August*/
-        when event_type in ('D') then 'Attraction'
+   /*     when event_type in ('D') then 'Attraction'
         when event_type in ('E') then 'Activity'
         when event_type not in ('D','E') then 'Event'
       end as product_category
@@ -78,6 +78,68 @@ fd as (
     left join decm using (detail_event_id)
   group by
     1,2,3,4,5,6,7
+)*/
+, evoo as ( /*new datasource event/TTD @7 Jan 2021*/
+  select
+   * except (product_subcategory,ps)
+   , string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) as product_subcategory
+   , case
+        when product_primary_category in ('attraction','playground') then 'Attraction'
+        when product_primary_category in ('beauty_wellness','class_workshop','culinary','food_drink','game_hobby','tour','travel_essential') then 'Activity'
+        when product_primary_category = 'event' then 'Event'
+        when product_primary_category = 'transport' and supplier_name = 'Railink' then 'Train' 
+        when product_primary_category = 'transport' 
+          and 
+          ( string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) like '%airport%'  
+          or string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) like'%lepas kunci%' 
+          or string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) like'%city to city%' 
+          )  
+        then 'Car' 
+        when product_primary_category = 'transport' then 'Activity'
+        when product_primary_category = 'hotel' then 'Hotel'
+        else product_primary_category
+      end as supplier_category
+    from
+    (
+      select
+        * except (product_subcategories, rn)
+        , json_extract_array(product_subcategories,'$.product_subcategories') as product_subcategory
+      from (
+        select
+          safe_cast(coreorderid as int64) as order_id
+          , case
+              when trim(product_supplierCode) = 'S2' then '23196226'
+              when trim(product_supplierCode) = 'S3' then '33505623'
+              when trim(product_supplierCode) = 'S6' then '33505604'
+              else json_extract_scalar (product_productPartners, '$.product_productPartners[0].businessId')
+            end as supplier_id
+         , case
+            when trim(product_supplierCode) = 'S2' then 'bemyguest'
+            when trim(product_supplierCode) = 'S3' then 'eazyspadeals'
+            when trim(product_supplierCode) = 'S6' then 'klook'
+            else json_extract_scalar (product_productPartners, '$.product_productPartners[0].name')
+          end as supplier_name
+          , lower(trim(product_primaryCategory)) as product_primary_category
+          , product_subcategories
+          , lower(disbursement_type) as disbursement_type
+          , row_number() over(partition by coreorderId, pt.code order by lastModifiedDate desc) as rn
+          from
+            `datamart-finance.staging.v_events_v2_order__order_l2`
+            left join unnest (priceTierQuantities) as pt
+            left join unnest(tickets) as t
+            where status like '%ISSUED%'
+            and payment_date >= (select filter1 from fd)
+            and payment_date <=(select filter3 from fd)
+            and lastModifiedDate >= (select filter2 from fd)
+          )
+   where
+      rn = 1
+    group by
+      product_subcategories,supplier_id,1,2,3,4,5
+)
+left join unnest(product_subcategory) as ps
+  group by
+    1,2,3,4,5
 )
 , occar as (
   select
@@ -934,9 +996,9 @@ fd as (
 , combine as (
   select
     distinct
-    coalesce(decm.supplier_id, occar.supplier_id, oth.supplier_id) as Supplier_Reference_ID
+    coalesce(evoo.supplier_id, occar.supplier_id, oth.supplier_id) as Supplier_Reference_ID
     , replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(CASE
-      WHEN REGEXP_CONTAINS(LOWER(trim(coalesce(oecm.supplier_name, occar.supplier_name, oth.supplier_name))), r"[àáâäåæçèéêëìíîïòóôöøùúûüÿœ]") THEN
+      WHEN REGEXP_CONTAINS(LOWER(trim(coalesce(evoo.supplier_name, occar.supplier_name, oth.supplier_name))), r"[àáâäåæçèéêëìíîïòóôöøùúûüÿœ]") THEN
         REGEXP_REPLACE(
           REGEXP_REPLACE(
             REGEXP_REPLACE(
@@ -947,7 +1009,7 @@ fd as (
                       REGEXP_REPLACE(
                         REGEXP_REPLACE(
                           REGEXP_REPLACE(
-                  REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(trim(coalesce(oecm.supplier_name, occar.supplier_name, oth.supplier_name)), 'œ', 'ce'), 'ÿ', 'y'), 'ç', 'c'), 'æ', 'ae'),'Œ', 'CE'), 'Ÿ', 'Y'), 'Ç', 'C'), 'Æ', 'AE'),
+                  REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(trim(coalesce(evoo.supplier_name, occar.supplier_name, oth.supplier_name)), 'œ', 'ce'), 'ÿ', 'y'), 'ç', 'c'), 'æ', 'ae'),'Œ', 'CE'), 'Ÿ', 'Y'), 'Ç', 'C'), 'Æ', 'AE'),
                           r"[ùúûü]", 'u'),
                         r"[òóôöø]", 'o'),
                       r"[ìíîï]", 'i'),
@@ -959,12 +1021,12 @@ fd as (
           r"[ÈÉÊË]", 'E'),
         r"[ÀÁÂÄÅ]", 'A')
       ELSE
-        trim(coalesce(oecm.supplier_name, occar.supplier_name, oth.supplier_name))
+        trim(coalesce(evoo.supplier_name, occar.supplier_name, oth.supplier_name))
       END,'©',''),'®',''),'™',''),'°',''),'–','-'),'‘',"'"),'’',"'"),'“','"'),'”','"'),'¬†','') AS Supplier_Name
-    , coalesce(oecm.product_category, occar.product_category, oth.product_category) as Supplier_Category_ID
+    , coalesce(evoo.supplier_category, occar.product_category, oth.product_category) as Supplier_Category_ID
     , '' Supplier_Group_ID
     , '' Worktag_Product_Provider_Org_Ref_ID
-    , coalesce(oecm.product_category, occar.product_category, oth.product_category) as Worktag_Product_Category_Ref_ID
+    , coalesce(evoo.supplier_category, occar.product_category, oth.product_category) as Worktag_Product_Category_Ref_ID
     , '' Supplier_Default_Currency
     , 'Immediate' Payment_Terms
     , 'Deposit_Deduction' Accepted_Payment_Types_1
@@ -980,8 +1042,8 @@ fd as (
           end
         when string_agg(distinct ocd.order_type) = 'event' then
           case
-            when string_agg(distinct decm.ext_source_event) = 'BE_MY_GUEST' then 'Deposit_Deduction'
-            else 'TT'
+            when string_agg(distinct evoo.disbursement_type) = 'bank_transfer' then 'TT'
+            else 'Deposit_Deduction'
           end 
         when string_agg(distinct ocd.order_type) = 'tixhotel' then 
           case
@@ -1075,12 +1137,13 @@ fd as (
     oc
     inner join ocd using (order_id)
     left join oth using (order_id)
-    left join oecm using (order_detail_id)
-    left join decm using (detail_event_id)
+    left join evoo using (order_id)
+    /*left join oecm using (order_detail_id)
+    left join decm using (detail_event_id)*/
     left join occar using (order_detail_id)
     left join hpt on safe_cast(hpt.hotel_id as string) = oth.supplier_id
   where
-    coalesce(oecm.product_category, occar.product_category, oth.product_category) is not null
+    coalesce(evoo.supplier_category, occar.product_category, oth.product_category) is not null
   group by 1,2,3,4,5,6,7,8,9,10,11,12,13,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42
 )
 , add_row_number as (
