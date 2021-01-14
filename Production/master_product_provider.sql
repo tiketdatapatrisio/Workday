@@ -189,8 +189,8 @@ fd as (
         left join unnest (priceTierQuantities) as pt
         left join unnest(tickets) as t
         where status like '%ISSUED%'
-        and payment_date >= (select filter1 from fd)
-        and payment_date <=(select filter3 from fd)
+        and createdDate >= (select filter1 from fd)
+        and createdDate <=(select filter3 from fd)
         and lastModifiedDate >= (select filter2 from fd)
           )
    where
