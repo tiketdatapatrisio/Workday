@@ -25,6 +25,22 @@ fd as (
   group by
     order_id
 )
+, ocr as (
+  select
+    distinct
+    order_id
+    , 'b2b_cermati' as ocr_payment_source
+  from
+    `prod-datarangers.galaxy_stg.order__cart`
+  where
+    payment_status = 'paid'
+    and reseller_type = 'reseller'
+    and reseller_id = 33918862 /* BCA - Cermati */
+    and payment_timestamp >= (select filter2 from fd)
+    and payment_timestamp < (select filter4 from fd)
+  group by
+    order_id
+)
 , ocd as (
   select
     order_id
@@ -42,9 +58,13 @@ fd as (
   select
     order_id
     , max(payment_amount) as payment_amount
-    , string_agg(distinct payment_source) as payment_source
+    , case
+        when string_agg(distinct ocr_payment_source) is not null then string_agg(distinct ocr_payment_source)
+        else string_agg(distinct payment_source)
+      end as payment_source
   from 
     `prod-datarangers.galaxy_stg.order__payment`
+    left join ocr using(order_id)
   where
     payment_flag = 1
     and payment_id = 1
