@@ -17,9 +17,25 @@ fd as (
     , timestamp(datetime(max(payment_timestamp), 'Asia/Jakarta')) as transaction_timestamp
     , max(cc_installment) as cc_installment
   from
-    `prod-datarangers.galaxy_stg.order__cart`
+   `datamart-finance.staging.v_order__cart`
   where
     payment_status = 'paid'
+    and payment_timestamp >= (select filter2 from fd)
+    and payment_timestamp < (select filter4 from fd)
+  group by
+    order_id
+)
+, ocr as (
+  select
+    distinct
+    order_id
+    , 'b2b_cermati' as ocr_payment_source
+  from
+   `datamart-finance.staging.v_order__cart`
+  where
+    payment_status = 'paid'
+    and reseller_type = 'reseller'
+    and reseller_id = 33918862 /* BCA - Cermati */
     and payment_timestamp >= (select filter2 from fd)
     and payment_timestamp < (select filter4 from fd)
   group by
@@ -30,7 +46,7 @@ fd as (
     order_id
     , 1 as is_top_up_affiliate_flag
   from
-    `prod-datarangers.galaxy_stg.order__cart_detail`
+   `datamart-finance.staging.v_order__cart_detail`
   where
     created_timestamp >= (select filter3 from fd)
     and created_timestamp < (select filter4 from fd)
@@ -42,9 +58,13 @@ fd as (
   select
     order_id
     , max(payment_amount) as payment_amount
-    , string_agg(distinct payment_source) as payment_source
+    , case
+        when string_agg(distinct ocr_payment_source) is not null then string_agg(distinct ocr_payment_source)
+        else string_agg(distinct payment_source)
+      end as payment_source
   from 
-    `prod-datarangers.galaxy_stg.order__payment`
+   `datamart-finance.staging.v_order__payment`
+    left join ocr using(order_id)
   where
     payment_flag = 1
     and payment_id = 1
@@ -60,7 +80,7 @@ fd as (
     , string_agg(distinct pg_name) as payment_gateway
     , string_agg(distinct acquiring_bank) as acquiring_bank
   from
-    `prod-datarangers.galaxy_stg.order__credit_card` 
+   `datamart-finance.staging.v_order__credit_card` 
   where
     payment_timestamp >= (select filter3 from fd)
     and payment_timestamp < (select filter4 from fd)
@@ -76,7 +96,7 @@ fd as (
     , timestamp(datetime(max(payment_date), 'Asia/Jakarta')) as payment_timestamp
     , max(credit) as total_credit
   from
-    `prod-datarangers.galaxy_stg.bank__transfer` 
+   `datamart-finance.staging.v_bank__transfer` 
   where timestamp_insert >= (select filter1 from fd)
   and timestamp_insert < (select filter4 from fd)
   and payment_date >= '2020-01-06 17:00:00' /* only need data after 7 jan 2020*/
@@ -90,7 +110,7 @@ fd as (
     , payment_type_workday as payment_type_bank
     /* , external_reference */
   from
-    `prod-datarangers.galaxy_stg.workday_mapping_payment_bank`
+   `datamart-finance.staging.v_workday_mapping_payment_bank`
   where
     pg_name is null
     and bank_id is null
@@ -106,7 +126,7 @@ fd as (
     , payment_type_workday as payment_type_bank
     /* , external_reference */
   from 
-    `prod-datarangers.galaxy_stg.workday_mapping_payment_bank`
+   `datamart-finance.staging.v_workday_mapping_payment_bank`
   where
     pg_name is not null
   group by
@@ -120,7 +140,7 @@ fd as (
     /* , external_reference */
     , safe_cast(bank_id as int64) as bank_id
   from
-    `prod-datarangers.galaxy_stg.workday_mapping_payment_bank`
+   `datamart-finance.staging.v_workday_mapping_payment_bank`
   where
     pg_name is null
     and bank_id is not null
@@ -131,7 +151,7 @@ fd as (
   select
     *
   from
-    `prod-datarangers.galaxy_stg.workday_mapping_payment_charge` 
+   `datamart-finance.staging.v_workday_mapping_payment_charge` 
 )
 , fact as (
   select
