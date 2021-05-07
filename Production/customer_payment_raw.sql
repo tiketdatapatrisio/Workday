@@ -35,7 +35,7 @@ fd as (
   where
     payment_status = 'paid'
     and reseller_type = 'reseller'
-    and reseller_id = 33918862 /* BCA - Cermati */
+    and reseller_id in (34313834,33918862) /* PT Dwi Cermat Indonesia / BCA - Cermati */
     and payment_timestamp >= (select filter2 from fd)
     and payment_timestamp < (select filter4 from fd)
   group by
