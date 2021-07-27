@@ -855,6 +855,26 @@ wsr_id as (
     )
   where rn = 1
 )
+, fmd as (
+  SELECT 
+  *
+  FROM(
+    SELECT 
+      order_detail_id
+      , original_commission_amount	
+      , manual_markup_amount
+      , safe_cast(
+          case 
+            when manual_markup_amount > 0 then commission
+            else original_commission_amount
+          end 
+        as float64) as commission_flight_fmd
+      , row_number() over(partition by order_id, order_detail_id order by processed_dttm  desc) as rn
+    from `datamart-finance.staging.v_flight_management_dashboard` 
+    where date(payment_date) >= (select date(filter2) from fd)
+  )  
+  WHERE rn = 1
+)
 , fact_flight as (
   select
     order_detail_id
@@ -1317,10 +1337,14 @@ wsr_id as (
               end
           end
         , case 
+            when date(oc.payment_timestamp) >= '2021-08-01' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129') then ff.commission_price_nta_flight
+              - safe_cast(fmd.manual_markup_amount as numeric)
             when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129')
-              then ff.commission_price_nta_flight - safe_cast(fmd.manual_markup_amount as numeric) /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+              then ff.commission_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
             when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') and ocdrd.is_reschedule is null then order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
-            else ff.commission_flight - safe_cast(fmd.manual_markup_amount as numeric)
+            when date(oc.payment_timestamp) >= '2021-08-01' then ff.commission_flight
+              - safe_cast(fmd.manual_markup_amount as numeric)
+            else ff.commission_flight
           end
         , 0
       ) as commission
@@ -1329,7 +1353,7 @@ wsr_id as (
         , fc.upselling_car
         , fe.upselling_event
         , case
-            when ff.supplier_flight not in ('VR-00000002','VR-00000005') then safe_cast(fmd.manual_markup_amount as numeric)
+            when date(oc.payment_timestamp) >= '2021-08-01' and ff.supplier_flight not in ('VR-00000002','VR-00000005') then safe_cast(fmd.manual_markup_amount as numeric)
             else ff.upselling_flight
           end
         , fh.upselling_hotel
@@ -1612,6 +1636,7 @@ wsr_id as (
     left join master_event_supplier mes on (coalesce(fe.supplier_event,fat.old_supplier_id) = mes.old_supplier_id and ocd.order_name = mes.event_name)
     left join master_event_product_provider mepp on (coalesce(fe.product_provider_event,fat.old_product_provider_id) = mepp.old_product_provider_id and ocd.order_name = mepp.event_name)
     left join oar using (order_id)
+    left join fmd  using (order_detail_id)
 
 )
 /* save the result of this query to temporary table -> let's agree the temporary location will be in `datamart-finance.data_source_workday.temp_customer_invoice_raw_part_1`*/
