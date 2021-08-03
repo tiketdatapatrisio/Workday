@@ -126,18 +126,20 @@ from
         else 0
       end as is_supplier_flight_not_found_flag
     , case 
-        when sum(cogs + commission + upselling + subsidy + payment_charge + promocode_value + giftvoucher_value + refund_deposit_value + tiketpoint_value + insurance_value + cancel_insurance_value + ifnull(vat_out,0) + ifnull(baggage_fee,0) + rebooking_sales_hotel + total_add_ons_hotel_sell_price_amount + halodoc_sell_price_amount + convenience_fee_amount + diff_amount_rebooking) over(partition by order_id) > 0 
-        and sum(cogs + commission + upselling + subsidy + payment_charge + promocode_value + giftvoucher_value + refund_deposit_value + tiketpoint_value + insurance_value + cancel_insurance_value + ifnull(vat_out,0) + ifnull(baggage_fee,0) + rebooking_sales_hotel + total_add_ons_hotel_sell_price_amount + halodoc_sell_price_amount + convenience_fee_amount + diff_amount_rebooking) over(partition by order_id) <> payment_amount
+        when payment_source not in('tiketpoint','giftcard') 
+        --and sum(cogs) over(partition by order_id) = 0 
+         /*sum(cogs + commission + upselling + subsidy + payment_charge + promocode_value + giftvoucher_value + refund_deposit_value + tiketpoint_value + insurance_value + cancel_insurance_value + ifnull(vat_out,0) + ifnull(baggage_fee,0) + rebooking_sales_hotel + total_add_ons_hotel_sell_price_amount + halodoc_sell_price_amount + convenience_fee_amount + diff_amount_rebooking) over(partition by order_id) > 0 /*remove logic to validate data that haven't amount >0 */
+        and sum(cogs + commission + partner_commission + upselling + subsidy + payment_charge + promocode_value + giftvoucher_value + refund_deposit_value + tiketpoint_value + insurance_value + cancel_insurance_value + ifnull(vat_out,0) + ifnull(baggage_fee,0) + rebooking_sales_hotel + total_add_ons_hotel_sell_price_amount + halodoc_sell_price_amount + convenience_fee_amount + diff_amount_rebooking) over(partition by order_id) <> payment_amount
           then 0
         else 1
       end as is_amount_valid_flag
   from
-    `datamart-finance.datasource_workday.temp_customer_invoice_raw_part_1` c
+    `datamart-finance.datamart_edp.temp_customer_invoice_raw_part1_2021` c
     left join master_data_supplier ms on ms.Supplier_Reference_ID = c.supplier and c.payment_date >= ms.start_date and c.payment_date < ms.end_date
     left join master_data_product_provider mpp on mpp.Organization_Reference_ID = c.product_provider and c.payment_date >= mpp.start_date and c.payment_date < mpp.end_date
     /*left join master_b2b_online_and_offline mbo on safe_cast(mbo.business_id as string) = c.customer_id and c.payment_date >= mbo.start_date and c.payment_date < mbo.end_date*/
     /*left join master_b2b_corporate mbc on mbc.business_id = c.customer_id and c.payment_date >= mbc.start_date and c.payment_date < mbc.end_date */
-    left join master_data_customer mco on mco.Customer_Reference_ID = c.customer_id and mco.Customer_Category_ID in('B2B Online','B2B Offline') and c.payment_date >= mco.start_date and c.payment_date < mco.end_date 
+    left join master_data_customer mco on mco.Customer_Reference_ID = c.customer_id and mco.Customer_Category_ID in('B2B Online','B2B_Online','B2B Offline') and c.payment_date >= mco.start_date and c.payment_date < mco.end_date 
     left join master_data_customer mcc on mcc.Customer_Reference_ID = c.customer_id and mcc.Customer_Category_ID = 'B2B_Corporate' and c.payment_date >= mcc.start_date and c.payment_date < mcc.end_date 
 )
 , tr as (
@@ -149,7 +151,7 @@ from
         *
         , row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) as rn
       from
-        `datamart-finance.datasource_workday.customer_invoice_raw`
+        `datamart-finance.datamart_edp.customer_invoice_raw_2021`
       where payment_date >= (select date(filter1,'Asia/Jakarta') from fd)
     )
   where rn = 1
@@ -247,8 +249,13 @@ from
   and (tr.old_id_rebooking = fact.old_id_rebooking or (tr.old_id_rebooking is null and fact.old_id_rebooking is null))
   and (tr.diff_amount_rebooking = fact.diff_amount_rebooking or (tr.diff_amount_rebooking is null and fact.diff_amount_rebooking is null))
   and (tr.is_rebooking_flag = fact.is_rebooking_flag or (tr.is_rebooking_flag is null and fact.is_rebooking_flag is null))
-where
-  tr.order_id is null
+  and (tr.is_flexi_reschedule = fact.is_flexi_reschedule or (tr.is_flexi_reschedule is null and fact.is_flexi_reschedule is null))
+  and (tr.flexi_fare_diff = fact.flexi_fare_diff or (tr.flexi_fare_diff is null and fact.flexi_fare_diff is null))
+  and (tr.flexi_reschedule_fee = fact.flexi_reschedule_fee or (tr.flexi_reschedule_fee is null and fact.flexi_reschedule_fee is null))
+  and (tr.partner_commission = fact.partner_commission or (tr.partner_commission is null and fact.partner_commission is null))
+  and (tr.subsidy_category = fact.subsidy_category or (tr.subsidy_category is null and fact.subsidy_category is null))
+  where
+    tr.order_id is null
 )
 
 select * from append
