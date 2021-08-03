@@ -5,7 +5,7 @@ lsw as (
     , order_detail_id
     , 1 as is_ci_sent_flag
   from
-    `datamart-finance.datasource_workday.log_sent_to_workday`
+    `datamart-finance.datamart_edp.log_sent_to_workday`
   where
     calculation_type_name = 'customer_invoice'
     and status_name = 'normal_order'
@@ -20,7 +20,7 @@ lsw as (
     , order_detail_id
     , 1 as is_supplier_invoice_sent_flag
   from
-    `datamart-finance.datasource_workday.log_sent_to_workday`
+    `datamart-finance.datamart_edp.log_sent_to_workday`
   where
     calculation_type_name = 'supplier_invoice'
     and date(created_timestamp) >= date_add(date(current_timestamp(),'Asia/Jakarta'), interval -3 day)
@@ -36,7 +36,7 @@ lsw as (
         *
         , row_number() over(partition by order_id, order_detail_id, spend_category order by processed_timestamp desc) as rn
       from
-        `datamart-finance.datasource_workday.supplier_invoice_raw`
+        `datamart-finance.datamart_edp.supplier_invoice_raw_OTW`
       where date(invoice_date) >= date_add(date(current_timestamp(),'Asia/Jakarta'), interval -3 day)
     )
   where rn = 1
