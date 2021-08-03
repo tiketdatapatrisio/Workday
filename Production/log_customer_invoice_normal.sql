@@ -5,7 +5,7 @@ lsw as (
     , order_detail_id
     , 1 as is_sent_flag
   from
-    `datamart-finance.datasource_workday.log_sent_to_workday`
+    `datamart-finance.datamart_edp.log_sent_to_workday`
   where
     calculation_type_name = 'customer_invoice'
     and date(created_timestamp) >= date_add(current_date(), interval -3 day)
@@ -21,8 +21,8 @@ lsw as (
         *
         , row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) as rn
       from
-        `datamart-finance.datasource_workday.customer_invoice_raw`
-      where payment_date >= date_add(date(current_timestamp(), 'Asia/Jakarta'), interval -3 day)
+        `datamart-finance.datamart_edp.customer_invoice_raw_2021`
+      where payment_date >= date_add(date(current_timestamp(), 'Asia/Jakarta'), interval -3 day) 
     )
   where rn = 1
 )
@@ -44,8 +44,14 @@ lsw as (
     and new_b2b_corporate_flag = 0
     and is_supplier_flight_not_found_flag = 0
     and is_amount_valid_flag = 1
+    and (
+          not is_flexi_reschedule
+          or (
+               is_flexi_reschedule
+               and flexi_fare_diff>0
+             )
+        )
 )
-
 select
   distinct
   order_id

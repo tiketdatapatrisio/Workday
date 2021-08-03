@@ -1,4 +1,3 @@
-
 with
 lsw as (
   select 
@@ -6,7 +5,7 @@ lsw as (
     , order_detail_id
     , 1 as is_sent_flag
   from
-    `datamart-finance.datasource_workday.log_sent_to_workday`
+    `datamart-finance.datamart_edp.log_sent_to_workday`
   where
     calculation_type_name = 'customer_invoice'
     and date(created_timestamp) >= date_add(current_date('Asia/Jakarta'), interval -3 day)
@@ -22,8 +21,10 @@ lsw as (
         *
         , row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) as rn
       from
-        `datamart-finance.datasource_workday.customer_invoice_raw`
+        --`datamart-finance.datasource_workday.customer_invoice_raw`
+        `datamart-finance.datamart_edp.customer_invoice_raw_2021`
       where payment_date >= date_add(date(current_timestamp(), 'Asia/Jakarta'), interval -4 day)
+      and payment_source is not null /* to handle order with zero payment - 15 Mei 2021 EDP */
     )
   where rn = 1
 )
@@ -40,12 +41,19 @@ lsw as (
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , [
       struct(
         revenue_category as revenue_category
-        , cogs as extended_amount
+        , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then flexi_fare_diff
+          else cogs 
+          end as extended_amount
         , quantity as quantity
-        , safe_divide(cogs,quantity) as selling_price
+        , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then safe_divide(flexi_fare_diff,quantity)
+          else safe_divide(cogs,quantity) 
+          end as selling_price
         , authentication_code as authentication_code
         , virtual_account as virtual_account
         , giftcard_voucher as giftcard_voucher
@@ -55,6 +63,8 @@ lsw as (
         , product_provider
         , supplier
         , case
+            when revenue_category = 'Ticket' and product_category = 'Flight' and is_flexi_reschedule and flexi_fare_diff > 0 
+            then concat(memo_flight, ' / Reschedule from : ', TRIM(REGEXP_REPLACE(refund_deposit_name,'[^0-9 ]','')), ' / Flexi')
             when revenue_category = 'Room' then memo_hotel
             when revenue_category = 'Ticket' and product_category = 'Flight' then memo_flight
           else memo_product
@@ -121,13 +131,17 @@ lsw as (
         , supplier
         , memo_product as memo
         , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then 0
             when commission <> 0 then 1
             else 0
           end as valid_struct_flag
         , 4 as order_for_workday
       )
       , struct(
-        'Subsidy' as revenue_category
+        case
+          when subsidy_category is not null and payment_date >='2021-04-01' then subsidy_category /* 01 April 2021, breakdown rev category subsidy by ocdis.discount_type */
+          else 'Subsidy'
+        end as revenue_category
         , subsidy as extended_amount
         , quantity as quantity
         , safe_divide(subsidy,quantity) as selling_price
@@ -181,7 +195,7 @@ lsw as (
         , supplier
         , memo_product as memo
         , case
-            when upselling > 0 then 1
+            when upselling <> 0 then 1
             else 0
           end as valid_struct_flag
         , 7 as order_for_workday
@@ -257,14 +271,41 @@ lsw as (
         , null as promocode_name
         , null as booking_code
         , null as ticket_number
-        , product_provider_reschedule_flight as product_provider
-        , supplier_reschedule_flight as supplier
+        , case
+            when product_provider_reschedule_flight is null then product_provider
+            else product_provider_reschedule_flight
+          end as product_provider
+        , case
+            when supplier_reschedule_flight is null then supplier
+            else supplier_reschedule_flight
+          end as supplier
         , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
         , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 then 0
             when refund_deposit_value < 0 then 1
             else 0
           end as valid_struct_flag
         , 11 as order_for_workday
+      )
+      , struct(
+        'Reschedule_fee' as revenue_category
+        , flexi_reschedule_fee as extended_amount
+        , 1 as quantity
+        , flexi_reschedule_fee as selling_price
+        , null as authentication_code
+        , null as virtual_account
+        , null as giftcard_voucher
+        , null as promocode_name
+        , null as booking_code
+        , null as ticket_number
+        , product_provider_reschedule_flight as product_provider
+        , supplier_reschedule_flight as supplier
+        , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
+        , case
+            when is_flexi_reschedule and flexi_fare_diff > 0 and flexi_reschedule_fee > 0 then 1
+            else 0
+          end as valid_struct_flag
+        , 12 as order_for_workday
       )
       , struct(
         'Reschedule_Fee' as revenue_category
@@ -284,7 +325,7 @@ lsw as (
             when reschedule_fee_flight > 0 then 1
             else 0
           end as valid_struct_flag
-        , 12 as order_for_workday
+        , 13 as order_for_workday
       )
       , struct(
         'Refund_Payable' as revenue_category
@@ -302,10 +343,34 @@ lsw as (
         , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
         , case
             when reschedule_cashback_amount > 0 then 1
+         --   when cogs+commission+refund_deposit_value < 0 then cogs+commission+refund_deposit_value 
+            else 0
+          end as valid_struct_flag
+        , 14 as order_for_workday
+      )
+      /*add Refund_payable for hotel reschedule*/
+      /*
+      , struct(
+        'Refund_Payable' as revenue_category
+        , ABS(cogs+commission+refund_deposit_value) as extended_amount
+        , 1 as quantity
+        , ABS(cogs+commission+refund_deposit_value) as selling_price
+        , null as authentication_code
+        , null as virtual_account
+        , null as giftcard_voucher
+        , null as promocode_name
+        , null as booking_code
+        , null as ticket_number
+        , product_provider
+        , supplier
+        , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
+        , case
+            when cogs+commission+refund_deposit_value < 0 then 1
             else 0
           end as valid_struct_flag
         , 13 as order_for_workday
       )
+      */
       , struct(
         'Miscellaneous_Expense' as revenue_category
         , reschedule_miscellaneous_amount as extended_amount
@@ -324,7 +389,7 @@ lsw as (
             when reschedule_miscellaneous_amount > 0 then 1
             else 0
           end as valid_struct_flag
-        , 14 as order_for_workday
+        , 15 as order_for_workday
       )
       , struct(
         'Promocode' as revenue_category
@@ -344,7 +409,7 @@ lsw as (
             when reschedule_promocode_amount <> 0 then 1
             else 0
           end as valid_struct_flag
-        , 15 as order_for_workday
+        , 16 as order_for_workday
       )
       , struct(
         'Rebooking_Sales' as revenue_category
@@ -364,7 +429,7 @@ lsw as (
             when rebooking_sales_hotel != 0 then 1
             else 0
           end as valid_struct_flag
-        , 16 as order_for_workday
+        , 17 as order_for_workday
       )
       , struct(
         'TixPoint_Disc' as revenue_category
@@ -384,7 +449,7 @@ lsw as (
             when tiketpoint_value < 0 then 1
             else 0
           end as valid_struct_flag
-        , 17 as order_for_workday
+        , 18 as order_for_workday
       )
       , struct(
         'Bank_Charges' as revenue_category
@@ -404,7 +469,7 @@ lsw as (
             when payment_charge <= 0 and payment_charge+pg_charge != 0 then 1
             else 0
           end as valid_struct_flag
-        , 18 as order_for_workday
+        , 19 as order_for_workday
       )
       , struct(
         'Bank_Charges' as revenue_category
@@ -424,7 +489,7 @@ lsw as (
             when payment_charge > 0 and cc_installment = 0 then 1
             else 0
           end as valid_struct_flag
-        , 19 as order_for_workday
+        , 20 as order_for_workday
       )
       , struct(
         'Installment' as revenue_category
@@ -444,7 +509,7 @@ lsw as (
             when cc_installment > 0 and payment_charge > 0 then 1
             else 0
           end as valid_struct_flag
-        , 20 as order_for_workday
+        , 21 as order_for_workday
       )
       , struct(
         'Gateway_Charges' as revenue_category
@@ -464,7 +529,7 @@ lsw as (
             when pg_charge > 0 and cc_installment >= 0 and payment_charge <= 0 then 1
             else 0
           end as valid_struct_flag
-        , 21 as order_for_workday
+        , 22 as order_for_workday
       )
       , struct(
         'Rapid_Test' as revenue_category
@@ -492,7 +557,7 @@ lsw as (
             when is_has_halodoc_flag > 0 and halodoc_sell_price_amount > 0 then 1
             else 0
           end as valid_struct_flag
-        , 22 as order_for_workday
+        , 23 as order_for_workday
       )
       , struct(
         'Convenience_Fee' as revenue_category
@@ -512,7 +577,7 @@ lsw as (
             when convenience_fee_amount > 0  then 1
             else 0
           end as valid_struct_flag
-        , 23 as order_for_workday
+        , 24 as order_for_workday
       )
       , struct(
         'Rebooking_Sales' as revenue_category
@@ -532,7 +597,7 @@ lsw as (
             when is_rebooking_flag > 0 and diff_amount_rebooking < 0  then 1
             else 0
           end as valid_struct_flag
-        , 24 as order_for_workday
+        , 25 as order_for_workday
       )
       , struct(
         'Refund_Payable' as revenue_category
@@ -552,7 +617,49 @@ lsw as (
             when is_rebooking_flag > 0 and diff_amount_rebooking > 0 then 1
             else 0
           end as valid_struct_flag
-        , 25 as order_for_workday
+        , 26 as order_for_workday
+      )
+      /* add Refund_payable for hotel */
+      , struct(
+        'Refund_Payable' as revenue_category
+        , abs(cogs+commission+refund_deposit_value+subsidy+upselling) as extended_amount
+        , 1 as quantity
+        , abs(cogs+commission+refund_deposit_value+subsidy+upselling) as selling_price
+        , null as authentication_code
+        , null as virtual_account
+        , null as giftcard_voucher
+        , null as promocode_name
+        , null as booking_code
+        , null as ticket_number
+        , product_provider
+        , supplier
+        , concat(safe_cast(order_id as string),' - ', refund_deposit_name) as memo
+        , case
+            when cogs+commission+refund_deposit_value+subsidy+upselling < 0 and product_category in ( 'Hotel','Hotel_NHA' ) then 1
+            else 0
+          end as valid_struct_flag
+        , 27 as order_for_workday
+      )
+      /* 10 March 2021, add Partner Commission for Hotel B2B */
+      , struct(
+        'Partner_Commission' as revenue_category
+        , partner_commission as extended_amount
+        , quantity as quantity
+        , safe_divide(partner_commission,quantity) as selling_price
+        , null as authentication_code
+        , null as virtual_account
+        , null as giftcard_voucher
+        , null as promocode_name
+        , null as booking_code
+        , null as ticket_number
+        , product_provider
+        , supplier
+        , memo_product as memo
+        , case
+            when partner_commission <> 0 then 1
+            else 0
+          end as valid_struct_flag
+        , 4 as order_for_workday
       )
     ] as info_array
   from tr
@@ -562,6 +669,13 @@ lsw as (
     and is_sent_flag is null
     and event_data_error_flag = 0 
     and pay_at_hotel_flag = 0 
+    and (
+          not is_flexi_reschedule
+          or (
+               is_flexi_reschedule
+               and flexi_fare_diff>0
+             )
+        )
     and new_supplier_flag = 0
     and new_product_provider_flag = 0
     and new_b2b_online_and_offline_flag = 0
@@ -571,32 +685,37 @@ lsw as (
 )
 , vertical as (
 select
-    order_id as order_id
-    , company as company
-    , customer_id as customer_id
-    , customer_type as customer_type
-    , selling_currency as selling_currency
-    , payment_timestamp as payment_timestamp
-    , info_array.revenue_category as revenue_category
-    , case 
-        when revenue_category = 'Insurance' then 'Insurance' 
-        when revenue_category = 'Rapid_Test' then 'Others' 
-        else product_category end as product_category
-    , coalesce(round(info_array.selling_price,2),0) as selling_price
-    , product_provider as product_provider
-    , supplier as supplier
-    , coalesce(info_array.quantity,0) as quantity
-    , coalesce(round(info_array.extended_amount,2),0) as extended_amount
-    , concat("'",safe_cast(info_array.authentication_code as string)) as authentication_code
-    , info_array.virtual_account as virtual_account
-    , info_array.giftcard_voucher as giftcard_voucher
-    , info_array.promocode_name as promocode_name
-    , concat("'",safe_cast(info_array.booking_code as string)) as booking_code
-    , concat("'",safe_cast(info_array.ticket_number as string))as ticket_number
-    , payment_source as payment_source
-    , payment_gateway as payment_gateway
-    , payment_type_bank as payment_type_bank
-    , info_array.memo as memo
+     coalesce(concat('"',safe_cast(order_id as string),'"'),'""') as order_id
+    , coalesce(concat('"',safe_cast(company as string),'"'),'""') as company
+    , coalesce(concat('"',safe_cast(customer_id as string),'"'),'""') as customer_id
+    , coalesce(concat('"',safe_cast(customer_type as string),'"'),'""') as customer_type
+    , coalesce(concat('"',safe_cast(selling_currency as string),'"'),'""') as selling_currency
+    , coalesce(concat('"',safe_cast(payment_timestamp as string),'"'),'""') as payment_timestamp
+    , coalesce(concat('"',safe_cast(info_array.revenue_category as string),'"'),'""') as revenue_category
+    , coalesce(concat('"',safe_cast(product_category as string),'"'),'""') as product_category
+    , coalesce(concat('"',safe_cast(round(info_array.selling_price,2) as string),'"'),'"0"') as selling_price
+    , coalesce(concat('"',safe_cast(product_provider as string),'"'),'""') as product_provider
+    , coalesce(concat('"',safe_cast(supplier as string),'"'),'""') as supplier
+    , coalesce(concat('"',safe_cast(info_array.quantity as string),'"'),'"0"') as quantity
+    , coalesce(concat('"',safe_cast(round(info_array.extended_amount,2) as string),'"'),'"0"') as extended_amount
+    , coalesce(concat('"',"'",safe_cast(info_array.authentication_code as string),'"'),'""') as authentication_code
+    , coalesce(concat('"',safe_cast(info_array.virtual_account as string),'"'),'""') as virtual_account
+    , coalesce(concat('"',safe_cast(info_array.giftcard_voucher as string),'"'),'""') as giftcard_voucher
+    , coalesce(concat('"',safe_cast(info_array.promocode_name as string),'"'),'""') as promocode_name
+    , coalesce(concat('"',"'",safe_cast(info_array.booking_code as string),'"'),'""') as booking_code
+    , coalesce(concat('"',"'",safe_cast(info_array.ticket_number as string),'"'),'""') as ticket_number
+    , coalesce(concat('"',safe_cast(payment_source as string),'"'),'""') as payment_source
+    , coalesce(concat('"',safe_cast(payment_gateway as string),'"'),'""') as payment_gateway
+    , coalesce(concat('"',safe_cast(payment_type_bank as string),'"'),'""') as payment_type_bank
+    , coalesce(concat('"',safe_cast(info_array.memo as string),'"'),'""') as memo
+    , coalesce(concat('"',safe_cast(case
+        when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
+        when customer_type = 'B2B Online' and customer_id not in ('33918862','34313834','34276356', '34272813','34361705','34382690','34423384') then 'Deposit_B2B_Online'
+        else '' end as string),'"'),'""') as deposit_rev_category
+    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+    , coalesce(concat('"',safe_cast(case
+        when customer_id in ('34272813', '32545767','34382690','34423384') then safe_cast(hotel_checkoutdate as string)
+        else '' end as string),'"'),'""') as due_date_override
     , info_array.order_for_workday as order_by_for_workday
 from
   info
@@ -627,6 +746,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     , booking_code
     , ticket_number
     , memo_product
+    , hotel_checkoutdate
     , add_ons.add_ons_revenue_category
     , add_ons.add_ons_commission_revenue_category
     , add_ons.add_ons_hotel_quantity
@@ -643,7 +763,14 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     and tr.add_ons_hotel_detail_array is not null
     and is_sent_flag is null
     and event_data_error_flag = 0 
-    and pay_at_hotel_flag = 0 
+    and pay_at_hotel_flag = 0
+    and (
+          not is_flexi_reschedule
+          or (
+               is_flexi_reschedule
+               and flexi_fare_diff>0
+             )
+        ) 
     and new_supplier_flag = 0
     and new_product_provider_flag = 0
     and new_b2b_online_and_offline_flag = 0
@@ -653,7 +780,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
 )
 , info_add_ons as (
   select
-  order_id
+    order_id
     , order_detail_id
     , company
     , customer_id
@@ -664,6 +791,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , [
       struct(
         add_ons_revenue_category as revenue_category
@@ -680,7 +808,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         , supplier
         , memo_product as memo
         , 1 as valid_struct_flag
-        , 21 as order_for_workday
+        , 22 as order_for_workday
       )
       , struct(
         add_ons_commission_revenue_category as revenue_category
@@ -697,7 +825,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         , supplier
         , memo_product as memo
         , 1 as valid_struct_flag
-        , 22 as order_for_workday
+        , 23 as order_for_workday
       )
     ] as info_array
   from
@@ -705,29 +833,37 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
 )
 , add_ons as (
   select
-    order_id as order_id
-    , company as company
-    , customer_id as customer_id
-    , customer_type as customer_type
-    , selling_currency as selling_currency
-    , payment_timestamp as payment_timestamp
-    , info_array.revenue_category as revenue_category
-    , product_category as product_category
-    , coalesce(round(info_array.selling_price,2),0) as selling_price
-    , product_provider as product_provider
-    , supplier as supplier
-    , coalesce(info_array.quantity,0) as quantity
-    , coalesce(round(info_array.extended_amount,2),0) as extended_amount
-    , concat("'",safe_cast(info_array.authentication_code as string)) as authentication_code
-    , info_array.virtual_account as virtual_account
-    , info_array.giftcard_voucher as giftcard_voucher
-    , info_array.promocode_name as promocode_name
-    , concat("'",safe_cast(info_array.booking_code as string)) as booking_code
-    , concat("'",safe_cast(info_array.ticket_number as string))as ticket_number
-    , payment_source as payment_source
-    , payment_gateway as payment_gateway
-    , payment_type_bank as payment_type_bank
-    , info_array.memo as memo
+     coalesce(concat('"',safe_cast(order_id as string),'"'),'""') as order_id
+    , coalesce(concat('"',safe_cast(company as string),'"'),'""') as company
+    , coalesce(concat('"',safe_cast(customer_id as string),'"'),'""') as customer_id
+    , coalesce(concat('"',safe_cast(customer_type as string),'"'),'""') as customer_type
+    , coalesce(concat('"',safe_cast(selling_currency as string),'"'),'""') as selling_currency
+    , coalesce(concat('"',safe_cast(payment_timestamp as string),'"'),'""') as payment_timestamp
+    , coalesce(concat('"',safe_cast(info_array.revenue_category as string),'"'),'""') as revenue_category
+    , coalesce(concat('"',safe_cast(product_category as string),'"'),'""') as product_category
+    , coalesce(concat('"',safe_cast(round(info_array.selling_price,2) as string),'"'),'"0"') as selling_price
+    , coalesce(concat('"',safe_cast(product_provider as string),'"'),'""') as product_provider
+    , coalesce(concat('"',safe_cast(supplier as string),'"'),'""') as supplier
+    , coalesce(concat('"',safe_cast(info_array.quantity as string),'"'),'"0"') as quantity
+    , coalesce(concat('"',safe_cast(round(info_array.extended_amount,2) as string),'"'),'"0"') as extended_amount
+    , coalesce(concat('"',"'",safe_cast(info_array.authentication_code as string),'"'),'""') as authentication_code
+    , coalesce(concat('"',safe_cast(info_array.virtual_account as string),'"'),'""') as virtual_account
+    , coalesce(concat('"',safe_cast(info_array.giftcard_voucher as string),'"'),'""') as giftcard_voucher
+    , coalesce(concat('"',safe_cast(info_array.promocode_name as string),'"'),'""') as promocode_name
+    , coalesce(concat('"',"'",safe_cast(info_array.booking_code as string),'"'),'""') as booking_code
+    , coalesce(concat('"',"'",safe_cast(info_array.ticket_number as string),'"'),'""') as ticket_number
+    , coalesce(concat('"',safe_cast(payment_source as string),'"'),'""') as payment_source
+    , coalesce(concat('"',safe_cast(payment_gateway as string),'"'),'""') as payment_gateway
+    , coalesce(concat('"',safe_cast(payment_type_bank as string),'"'),'""') as payment_type_bank
+    , coalesce(concat('"',safe_cast(info_array.memo as string),'"'),'""') as memo
+    , coalesce(concat('"',safe_cast(case
+        when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
+        when customer_type = 'B2B Online' and customer_id not in ('33918862','34313834','34276356', '34272813','34361705','34382690','34423384') then 'Deposit_B2B_Online'
+        else '' end as string),'"'),'""') as deposit_rev_category
+    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+    , coalesce(concat('"',safe_cast(case
+        when customer_id in ('34272813', '32545767','34382690','34423384') then safe_cast(hotel_checkoutdate as string)
+        else '' end as string),'"'),'""') as due_date_override
     , info_array.order_for_workday as order_by_for_workday
   from
     info_add_ons
@@ -750,6 +886,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , authentication_code
     , virtual_account
     , giftcard_voucher
@@ -773,6 +910,13 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     and is_sent_flag is null
     and event_data_error_flag = 0 
     and pay_at_hotel_flag = 0 
+    and (
+          not is_flexi_reschedule
+          or (
+               is_flexi_reschedule
+               and flexi_fare_diff>0
+             )
+        )
     and new_supplier_flag = 0
     and new_product_provider_flag = 0
     and new_b2b_online_and_offline_flag = 0
@@ -782,7 +926,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
 )
 , info_flight_multi_insurance as (
   select
-  order_id
+    order_id
     , order_detail_id
     , company
     , customer_id
@@ -793,6 +937,7 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
     , payment_source
     , payment_gateway
     , payment_type_bank
+    , hotel_checkoutdate
     , [
       struct(
         'Insurance' as revenue_category
@@ -817,29 +962,37 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
 )
 , flight_multi_insurance as (
   select
-    order_id as order_id
-    , company as company
-    , customer_id as customer_id
-    , customer_type as customer_type
-    , selling_currency as selling_currency
-    , payment_timestamp as payment_timestamp
-    , info_array.revenue_category as revenue_category
-    , product_category as product_category
-    , coalesce(round(info_array.selling_price,2),0) as selling_price
-    , product_provider as product_provider
-    , supplier as supplier
-    , coalesce(info_array.quantity,0) as quantity
-    , coalesce(round(info_array.extended_amount,2),0) as extended_amount
-    , concat("'",safe_cast(info_array.authentication_code as string)) as authentication_code
-    , safe_cast(info_array.virtual_account as string) as virtual_account
-    , safe_cast(info_array.giftcard_voucher as string) as giftcard_voucher
-    , safe_cast(info_array.promocode_name as string) as promocode_name
-    , concat("'",safe_cast(info_array.booking_code as string)) as booking_code
-    , concat("'",safe_cast(info_array.ticket_number as string))as ticket_number
-    , payment_source as payment_source
-    , payment_gateway as payment_gateway
-    , payment_type_bank as payment_type_bank
-    , info_array.memo as memo
+    coalesce(concat('"',safe_cast(order_id as string),'"'),'""') as order_id
+    , coalesce(concat('"',safe_cast(company as string),'"'),'""') as company
+    , coalesce(concat('"',safe_cast(customer_id as string),'"'),'""') as customer_id
+    , coalesce(concat('"',safe_cast(customer_type as string),'"'),'""') as customer_type
+    , coalesce(concat('"',safe_cast(selling_currency as string),'"'),'""') as selling_currency
+    , coalesce(concat('"',safe_cast(payment_timestamp as string),'"'),'""') as payment_timestamp
+    , coalesce(concat('"',safe_cast(info_array.revenue_category as string),'"'),'""') as revenue_category
+    , coalesce(concat('"',safe_cast(product_category as string),'"'),'""') as product_category
+    , coalesce(concat('"',safe_cast(round(info_array.selling_price,2) as string),'"'),'"0"') as selling_price
+    , coalesce(concat('"',safe_cast(product_provider as string),'"'),'""') as product_provider
+    , coalesce(concat('"',safe_cast(supplier as string),'"'),'""') as supplier
+    , coalesce(concat('"',safe_cast(info_array.quantity as string),'"'),'"0"') as quantity
+    , coalesce(concat('"',safe_cast(round(info_array.extended_amount,2) as string),'"'),'"0"') as extended_amount
+    , coalesce(concat('"',"'",safe_cast(info_array.authentication_code as string),'"'),'""') as authentication_code
+    , coalesce(concat('"',safe_cast(info_array.virtual_account as string),'"'),'""') as virtual_account
+    , coalesce(concat('"',safe_cast(info_array.giftcard_voucher as string),'"'),'""') as giftcard_voucher
+    , coalesce(concat('"',safe_cast(info_array.promocode_name as string),'"'),'""') as promocode_name
+    , coalesce(concat('"',"'",safe_cast(info_array.booking_code as string),'"'),'""') as booking_code
+    , coalesce(concat('"',"'",safe_cast(info_array.ticket_number as string),'"'),'""') as ticket_number
+    , coalesce(concat('"',safe_cast(payment_source as string),'"'),'""') as payment_source
+    , coalesce(concat('"',safe_cast(payment_gateway as string),'"'),'""') as payment_gateway
+    , coalesce(concat('"',safe_cast(payment_type_bank as string),'"'),'""') as payment_type_bank
+    , coalesce(concat('"',safe_cast(info_array.memo as string),'"'),'""') as memo
+    , coalesce(concat('"',safe_cast(case
+        when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
+        when customer_type = 'B2B Online' and customer_id not in ('33918862','34313834','34276356', '34272813','34361705','34382690','34423384') then 'Deposit_B2B_Online'
+        else '' end as string),'"'),'""') as deposit_rev_category
+    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+    , coalesce(concat('"',safe_cast(case
+        when customer_id in ('34272813', '32545767','34382690','34423384') then safe_cast(hotel_checkoutdate as string)
+        else '' end as string),'"'),'""') as due_date_override /* Customer Invoice Adjustment Integration (add 3 column: deposit_rev_category, intercompany, due_date_override) applies to data on 12 Nov 2020 ~EDP */
     , info_array.order_for_workday as order_by_for_workday
   from
     info_flight_multi_insurance
