@@ -11,7 +11,7 @@ fd as (
   )
 )
 , fact_product as (
-  select * from `datamart-finance.datasource_workday.temp_supplier_invoice_raw_part_1`
+  select * from `datamart-finance.datamart_edp.temp_supplier_invoice_raw_part1_OTW`
 )
 , fact_vertical as (
   select
@@ -128,7 +128,7 @@ select * from fact_add_ons_hotel
         *
         , row_number() over(partition by order_id, order_detail_id, spend_category order by processed_timestamp desc) as rn
       from
-        `datamart-finance.datasource_workday.supplier_invoice_raw`
+        `datamart-finance.datamart_edp.supplier_invoice_raw_OTW`
       where date(invoice_date) >= (select date(filter1,'Asia/Jakarta') from fd)
     )
   where rn = 1
