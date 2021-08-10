@@ -195,11 +195,11 @@ coalesce(safe_cast(workday_business_id as string),'') as Customer_Reference_ID
   , coalesce(safe_cast( Default_Payment_Type_ID as string), '') as Default_Payment_Type_ID
   , coalesce(safe_cast( Credit_Limit_Currency as string), '') as Credit_Limit_Currency
   , coalesce(safe_cast( Credit_Limit_Amount as string), '') as Credit_Limit_Amount
-  , coalesce(safe_cast( Tax_Default_Tax_Code as string), '') as Tax_Default_Tax_Code
-  , coalesce(safe_cast( Tax_ID_NPWP as string), '') as Tax_ID_NPWP
-  , coalesce(safe_cast( Tax_ID_Type as string), '') as Tax_ID_Type
-  , coalesce(safe_cast( Transaction_Tax_YN as string), '') as Transaction_Tax_YN
-  , coalesce(safe_cast( Primary_Tax_YN as string), '') as Primary_Tax_YN
+  , '' as Tax_Default_Tax_Code
+  , '' as Tax_ID_NPWP
+  , '' as Tax_ID_Type
+  , '' as Transaction_Tax_YN
+  , '' as Primary_Tax_YN
   , coalesce(safe_cast( Address_Effective_Date as string), '') as Address_Effective_Date
   , coalesce(safe_cast( Address_Country_Code as string), '') as Address_Country_Code
   , coalesce(safe_cast( Address_Line_1 as string), '') as Address_Line_1
@@ -222,11 +222,11 @@ select
   , coalesce( safe_cast( Default_Payment_Type_ID as string), '') as Default_Payment_Type_ID
   , coalesce( safe_cast( Credit_Limit_Currency as string), '') as Credit_Limit_Currency
   , coalesce( safe_cast( Credit_Limit_Amount as string), '') as Credit_Limit_Amount
-  , coalesce( safe_cast( Tax_Default_Tax_Code as string), '') as Tax_Default_Tax_Code
-  , coalesce( safe_cast( Tax_ID_NPWP as string), '') as Tax_ID_NPWP
-  , coalesce( safe_cast( Tax_ID_Type as string), '') as Tax_ID_Type
-  , coalesce( safe_cast( Transaction_Tax_YN as string), '') as Transaction_Tax_YN
-  , coalesce( safe_cast( Primary_Tax_YN as string), '') as Primary_Tax_YN
+  , '' as Tax_Default_Tax_Code
+  , '' as Tax_ID_NPWP
+  , '' as Tax_ID_Type
+  , '' as Transaction_Tax_YN
+  , '' as Primary_Tax_YN
   , coalesce( safe_cast( Address_Effective_Date as string), '') as Address_Effective_Date
   , coalesce( safe_cast( Address_Country_Code as string), '') as Address_Country_Code
   , coalesce( safe_cast( Address_Line_1 as string), '') as Address_Line_1
