@@ -672,6 +672,7 @@ lsw as (
         , supplier
         , memo_product as memo
         , case
+            when customer_type = 'Intercompany' then 0
             when partner_commission <> 0 then 1
             else 0
           end as valid_struct_flag
