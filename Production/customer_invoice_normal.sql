@@ -19,13 +19,26 @@ lsw as (
     (
       select
         *
-        , row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) as rn
+        , row_number() over(partition by order_id, order_detail_id, company order by processed_timestamp desc) as rn
       from
         --`datamart-finance.datasource_workday.customer_invoice_raw`
         `datamart-finance.datamart_edp.customer_invoice_raw_2021`
       where payment_date >= date_add(date(current_timestamp(), 'Asia/Jakarta'), interval -4 day)
       and payment_source is not null /* to handle order with zero payment - 15 Mei 2021 EDP */
     )
+  where rn = 1
+)
+, cr as (
+  select
+    * except(rn,processed_dttm)
+  from
+  (
+    select
+      *
+      , row_number() over(partition by source_currency, target_currency order by currency_rate_timestamp desc) as rn
+    from
+      `datamart-finance.sandbox_edp.workday_mapping_currency_rate`
+  )
   where rn = 1
 )
 , info as (
@@ -46,11 +59,13 @@ lsw as (
       struct(
         revenue_category as revenue_category
         , case
+            when customer_type = 'Intercompany' then cogs/ifnull(currency_rate,1)
             when is_flexi_reschedule and flexi_fare_diff > 0 then flexi_fare_diff
           else cogs 
           end as extended_amount
         , quantity as quantity
         , case
+            when customer_type = 'Intercompany' then safe_divide(cogs/10564.31,quantity)
             when is_flexi_reschedule and flexi_fare_diff > 0 then safe_divide(flexi_fare_diff,quantity)
           else safe_divide(cogs,quantity) 
           end as selling_price
@@ -131,6 +146,7 @@ lsw as (
         , supplier
         , memo_product as memo
         , case
+            when customer_type = 'Intercompany' then 0
             when is_flexi_reschedule and flexi_fare_diff > 0 then 0
             when commission <> 0 then 1
             else 0
@@ -664,6 +680,7 @@ lsw as (
     ] as info_array
   from tr
   left join lsw using (order_id, order_detail_id)
+  left join cr on tr.selling_currency = source_currency
   where 
     all_issued_flag = 1 
     and is_sent_flag is null
@@ -685,7 +702,14 @@ lsw as (
 )
 , vertical as (
 select
-     coalesce(concat('"',safe_cast(order_id as string),'"'),'""') as order_id
+     coalesce(
+      concat
+      (
+        '"'
+        , safe_cast(order_id as string)
+        , case when company = 'GTN_SGP' then '_SGP"'
+          else '"' end
+      ),'""') as order_id
     , coalesce(concat('"',safe_cast(company as string),'"'),'""') as company
     , coalesce(concat('"',safe_cast(customer_id as string),'"'),'""') as customer_id
     , coalesce(concat('"',safe_cast(customer_type as string),'"'),'""') as customer_type
@@ -712,7 +736,7 @@ select
         when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
         when customer_type = 'B2B Online' and customer_id not in ('33918862','34313834','34276356', '34272813','34361705','34382690','34423384') then 'Deposit_B2B_Online'
         else '' end as string),'"'),'""') as deposit_rev_category
-    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+    , coalesce(concat('"',safe_cast(case when customer_type = 'Intercompany' then 'GTN_IDN' else '' end as string),'"'),'""') as intercompany
     , coalesce(concat('"',safe_cast(case
         when customer_id in ('34272813', '32545767','34382690','34423384') then safe_cast(hotel_checkoutdate as string)
         else '' end as string),'"'),'""') as due_date_override
@@ -833,7 +857,14 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
 )
 , add_ons as (
   select
-     coalesce(concat('"',safe_cast(order_id as string),'"'),'""') as order_id
+     coalesce(
+      concat
+      (
+        '"'
+        , safe_cast(order_id as string)
+        , case when company = 'GTN_SGP' then '_SGP"'
+          else '"' end
+      ),'""') as order_id
     , coalesce(concat('"',safe_cast(company as string),'"'),'""') as company
     , coalesce(concat('"',safe_cast(customer_id as string),'"'),'""') as customer_id
     , coalesce(concat('"',safe_cast(customer_type as string),'"'),'""') as customer_type
@@ -860,8 +891,9 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
         when customer_type = 'B2B Online' and customer_id not in ('33918862','34313834','34276356', '34272813','34361705','34382690','34423384') then 'Deposit_B2B_Online'
         else '' end as string),'"'),'""') as deposit_rev_category
-    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+    , coalesce(concat('"',safe_cast(case when customer_type = 'Intercompany' then 'GTN_IDN' else '' end as string),'"'),'""') as intercompany
     , coalesce(concat('"',safe_cast(case
+        when customer_type = 'Intercompany' then safe_cast(hotel_checkoutdate as string)
         when customer_id in ('34272813', '32545767','34382690','34423384') then safe_cast(hotel_checkoutdate as string)
         else '' end as string),'"'),'""') as due_date_override
     , info_array.order_for_workday as order_by_for_workday
@@ -962,7 +994,14 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
 )
 , flight_multi_insurance as (
   select
-    coalesce(concat('"',safe_cast(order_id as string),'"'),'""') as order_id
+    coalesce(
+      concat
+      (
+        '"'
+        , safe_cast(order_id as string)
+        , case when company = 'GTN_SGP' then '_SGP"'
+          else '"' end
+      ),'""') as order_id
     , coalesce(concat('"',safe_cast(company as string),'"'),'""') as company
     , coalesce(concat('"',safe_cast(customer_id as string),'"'),'""') as customer_id
     , coalesce(concat('"',safe_cast(customer_type as string),'"'),'""') as customer_type
@@ -989,8 +1028,9 @@ order by payment_timestamp, order_id , info_array.order_for_workday asc
         when customer_type = 'B2B Online' and customer_id in ('27805728', '32545767') then 'Deposit_B2B_Online_Related'
         when customer_type = 'B2B Online' and customer_id not in ('33918862','34313834','34276356', '34272813','34361705','34382690','34423384') then 'Deposit_B2B_Online'
         else '' end as string),'"'),'""') as deposit_rev_category
-    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
+    , coalesce(concat('"',safe_cast(case when customer_type = 'Intercompany' then 'GTN_IDN' else '' end as string),'"'),'""') as intercompany
     , coalesce(concat('"',safe_cast(case
+        when customer_type = 'Intercompany' then safe_cast(hotel_checkoutdate as string)
         when customer_id in ('34272813', '32545767','34382690','34423384') then safe_cast(hotel_checkoutdate as string)
         else '' end as string),'"'),'""') as due_date_override /* Customer Invoice Adjustment Integration (add 3 column: deposit_rev_category, intercompany, due_date_override) applies to data on 12 Nov 2020 ~EDP */
     , info_array.order_for_workday as order_by_for_workday

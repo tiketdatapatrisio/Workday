@@ -258,4 +258,20 @@ from
     tr.order_id is null
 )
 
-select * from append
+select * except(is_intercompany,supplier)
+  , case
+      when is_intercompany then 'VR-00014888'
+      else supplier
+    end as supplier
+from append
+union all
+select 
+  order_id
+  , order_detail_id
+  , 'GTN_SGP' as company
+  , 'GTN_IDN' as customer_id
+  , 'Intercompany' as customer_type
+  , 'SGD' as selling_currency
+  , * except(order_id,order_detail_id,company,customer_id,customer_type,selling_currency,is_intercompany,supplier)
+  , supplier
+from append where is_intercompany
