@@ -1676,9 +1676,11 @@ wsr_id as (
           end
         , case 
             when date(oc.payment_timestamp) >= '2020-05-11' and ff.supplier_flight in ('VR-00000006','VR-00000011','VR-00000004','VR-00017129') then ff.commission_price_nta_flight /* 13 May 2020, Anggi Anggara: for lion group, start order >= 2020-05-11 using price_nta*//* 27 May 2020, Anggi Anggara: for trigana, sriwjaya , transnusa, start order >= 2020-05-11 using price_nta*/
+              - safe_cast(fmd.manual_markup_amount as numeric)
              when date(oc.payment_timestamp) >= '2021-02-20' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003') and manual_markup_amount > 0 then commission_flight_fmd /* 20 feb 2021, for sabre with markup amount > 0 */
             when date(oc.payment_timestamp) >= '2020-10-01' and order_flight_commission > 0 and ff.supplier_flight in ('VR-00000003','VR-00000007','VR-00000012') and ocdrd.is_reschedule is null then order_flight_commission /* 1 oct 2020, for sabre, transnusa, express only */
             else ff.commission_flight
+            - safe_cast(fmd.manual_markup_amount as numeric)
           end
         , 0
       ) as commission
@@ -1695,7 +1697,11 @@ wsr_id as (
         , fr.upselling_railink
         , fc.upselling_car
         , fttd.upselling_event
-        , ff.upselling_flight
+        , case
+            when ff.supplier_flight not in ('VR-00000002','VR-00000005')
+              then safe_cast(fmd.manual_markup_amount as numeric)
+            else ff.upselling_flight
+          end
         , fh.upselling_hotel
         , 0
       ) as upselling
