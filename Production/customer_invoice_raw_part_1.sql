@@ -1353,6 +1353,10 @@ wsr_id as (
 , fact_hotel as (
   select
     order_id
+    , case
+        when room_source_info = 'Tiket Network Pte Ltd' then true
+        else false 
+      end as is_intercompany
     , itinerary_id
     , quantity as quantity_hotel
     , booking_checkoutdate
@@ -1465,6 +1469,7 @@ wsr_id as (
 , combine as (
   select
     oc.order_id
+    , coalesce(fh.is_intercompany, false) as is_intercompany
     , ocd.order_detail_id
     , case
           when date(payment_timestamp) >= '2021-03-01' 
