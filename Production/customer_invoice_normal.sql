@@ -65,7 +65,7 @@ lsw as (
           end as extended_amount
         , quantity as quantity
         , case
-            when customer_type = 'Intercompany' then safe_divide(cogs/10564.31,quantity)
+            when customer_type = 'Intercompany' then safe_divide(cogs/currency_rate,quantity)
             when is_flexi_reschedule and flexi_fare_diff > 0 then safe_divide(flexi_fare_diff,quantity)
           else safe_divide(cogs,quantity) 
           end as selling_price
