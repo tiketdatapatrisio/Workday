@@ -134,10 +134,11 @@ from
         else 1
       end as is_amount_valid_flag
   from
-    (
-      select
-        * except(payment_amount)
-        , safe_cast(payment_amount+diff_amount_rebooking as numeric) as payment_amount
+      (
+      select 
+      * except(payment_amount)
+      , case when is_rebooking_flag = 1 and diff_amount_rebooking > 1 then safe_cast(payment_amount + diff_amount_rebooking as numeric) 
+        else payment_amount end as payment_amount
       from
         `datamart-finance.datamart_edp.temp_customer_invoice_raw_part1_2021`
     ) as c
@@ -153,10 +154,11 @@ from
     * except (rn)
   from
     (
-      select
-        * except(payment_amount)
-        , safe_cast(payment_amount+diff_amount_rebooking as numeric) as payment_amount
-        , row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) as rn
+      select 
+      * except(payment_amount)
+      , case when is_rebooking_flag = 1 and diff_amount_rebooking > 1 then safe_cast(payment_amount + diff_amount_rebooking as numeric) 
+        else payment_amount end as payment_amount
+      , row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) as rn
       from
         `datamart-finance.datamart_edp.customer_invoice_raw_2021`
       where payment_date >= (select date(filter1,'Asia/Jakarta') from fd)
@@ -261,24 +263,8 @@ from
   and (tr.flexi_reschedule_fee = fact.flexi_reschedule_fee or (tr.flexi_reschedule_fee is null and fact.flexi_reschedule_fee is null))
   and (tr.partner_commission = fact.partner_commission or (tr.partner_commission is null and fact.partner_commission is null))
   and (tr.subsidy_category = fact.subsidy_category or (tr.subsidy_category is null and fact.subsidy_category is null))
-  where
-    tr.order_id is null
+ where
+   tr.order_id is null
 )
 
-select * except(is_intercompany,supplier)
-  , case
-      when is_intercompany then 'VR-00014888'
-      else supplier
-    end as supplier
-from append
-union all
-select 
-  order_id
-  , order_detail_id
-  , 'GTN_SGP' as company
-  , 'GTN_IDN' as customer_id
-  , 'Intercompany' as customer_type
-  , 'SGD' as selling_currency
-  , * except(order_id,order_detail_id,company,customer_id,customer_type,selling_currency,is_intercompany,supplier)
-  , supplier
-from append where is_intercompany
+select * from append
