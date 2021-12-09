@@ -17,70 +17,141 @@ with
     `datamart-finance.datasource_workday.master_data_customer`
 )
 /* b2b_corporate - start */
-, vc as (
-select
-  distinct(workday_business_id) as workday_business_id
-  , REPLACE(REPLACE(company_name,'\r',''),'\n','') as Customer_Name
-  , 'B2B_Corporate' as Customer_Category_ID
-  ,case
-        when Due_Date = 7 then 'NET_7'
-        when due_date = 14 then 'NET_14'
-        when due_date = 30 then 'NET_30'
-        when due_date = 45 then 'NET_45'
-        when due_date = 0 then 'NET_14'
-        when due_date is null then 'NET_14'
-      end as Payment_Terms_ID
-  , 'Manual' as Default_Payment_Type_ID
-  , 'IDR' as Credit_Limit_Currency
-  , credit_limit as Credit_Limit_Amount
-  , case
-        when npwp <> '' then 'TAX_CODE-6-1'
-        when npwp = 'null' then ''
-        else ''
-        end as Tax_Default_Tax_Code
-  , ifnull(replace(npwp,',','.'),'') as Tax_ID_NPWP
-  , case 
-        when npwp <> '' then 'IDN-NPWP'
-        when npwp = 'null' then ''
-        else ''
-        end as Tax_ID_Type
-  ,case 
-        when npwp <> '' then 'Y'
-        when npwp = 'null' then ''
-        else ''
-        end as Transaction_Tax_YN
-  ,case 
-        when npwp <> '' then 'Y'
-        when npwp = 'null' then ''
-        else ''
-        end as Primary_Tax_YN
-  ,case
-        when address<>'' then '2020-01-01'
-        when address='null' then ''
-        else ''
-        end as Address_Effective_Date
-  , case
+, ac as ( /*old b2b corp from gdocs*/
+  select
+    distinct(workday_business_id) as workday_business_id
+    , REPLACE(REPLACE(company_name,'\r',''),'\n','') as Customer_Name
+    , 'B2B_Corporate' as Customer_Category_ID
+    , case
+          when due_date = 7 then 'NET_7'
+          when due_date = 14 then 'NET_14'
+          when due_date = 30 then 'NET_30'
+          when due_date = 45 then 'NET_45'
+          when due_date = 0 then 'NET_14'
+          when due_date is null then 'NET_14'
+        end as Payment_Terms_ID
+    , 'Manual' as Default_Payment_Type_ID
+    , 'IDR' as Credit_Limit_Currency
+    , credit_limit as Credit_Limit_Amount
+    , case
+          when npwp <> '' then 'TAX_CODE-6-1'
+          when npwp = 'null' then ''
+          else ''
+          end as Tax_Default_Tax_Code
+    , ifnull(replace(npwp,',','.'),'') as Tax_ID_NPWP
+    , case 
+          when npwp <> '' then 'IDN-NPWP'
+          when npwp = 'null' then ''
+          else ''
+          end as Tax_ID_Type
+    ,case 
+          when npwp <> '' then 'Y'
+          when npwp = 'null' then ''
+          else ''
+          end as Transaction_Tax_YN
+    ,case 
+          when npwp <> '' then 'Y'
+          when npwp = 'null' then ''
+          else ''
+          end as Primary_Tax_YN
+    ,case
+          when address<>'' then '2020-01-01'
+          when address='null' then ''
+          else ''
+          end as Address_Effective_Date
+    , case
+          when address<>'' then 'ID'
+          when address='null' then ''
+          else ''
+          end as Address_Country_Code
+    , ifnull(REPLACE(REPLACE(address,'\r',''),'\n',''), '') as Address_Line_1
+    , '' as Address_Line_2
+    , '' as Address_City_Subdivision_2
+    , '' as Address_City_Subdivision_1
+    , case 
         when address<>'' then 'ID'
         when address='null' then ''
         else ''
-        end as Address_Country_Code
-  , REPLACE(REPLACE(address,'\r',''),'\n','') as Address_Line_1
+        end as Address_City
+    , '' as Address_Region_Subdivision_2
+    , '' as Address_Region_Subdivision_1
+    , '' as Address_Region_Code
+    , '' as Address_Postal_Code
+  from
+    `datamart-finance.staging.v_corporate_account` 
+  where
+    workday_business_id is not null
+)
+, vc as ( /*new b2b corp from dashboard*/
+  select
+  unique_id as workday_business_id
+  , name as Customer_Name
+  , 'B2B_Corporate' as Customer_Category_ID
+  , case
+      when due_date = 7 then 'NET_7'
+      when due_date = 14 then 'NET_14'
+      when due_date = 30 then 'NET_30'
+      when due_date = 45 then 'NET_45'
+      when due_date = 0 then 'NET_14'
+      when due_date is null then 'NET_14'
+    end as Payment_Terms_ID
+  , 'Manual' as Default_Payment_Type_ID
+  , 'IDR' as Credit_Limit_Currency
+  , coalesce(credit_limit, 0) as Credit_Limit_Amount
+  , '' as Tax_Default_Tax_Code
+  , '' as Tax_ID_NPWP
+  , '' as Tax_ID_Type
+  , '' as Transaction_Tax_YN
+  , '' as Primary_Tax_YN
+  , case
+      when billing_address <> '' then safe_cast(date(datetime(i.updated_at, 'Asia/Jakarta')) as string)
+      when billing_address = 'null' then ''
+      else ''
+    end as Address_Effective_Date
+  , case
+      when billing_address <> '' then 'ID'
+      when billing_address = 'null' then ''
+      else ''
+    end as Address_Country_Code
+  , ifnull(billing_address,'') as Address_Line_1
   , '' as Address_Line_2
   , '' as Address_City_Subdivision_2
   , '' as Address_City_Subdivision_1
   , case 
-      when address<>'' then 'ID'
-      when address='null' then ''
+      when billing_address<>'' then 'ID'
+      when billing_address='null' then ''
       else ''
       end as Address_City
   , '' as Address_Region_Subdivision_2
   , '' as Address_Region_Subdivision_1
   , '' as Address_Region_Code
   , '' as Address_Postal_Code
-  from
-    `datamart-finance.staging.v_corporate_account` 
-  where
-    workday_business_id is not null
+from
+  (
+    select
+      *
+      , row_number() over(partition by id order by updated_at desc) as rn
+    from 
+      `datamart-finance.staging.v_tix_affiliate_platform__corporates`
+  ) c
+left join
+  (
+    select
+      *
+      , row_number() over(partition by corporate_id order by updated_at desc) as rn
+    from
+      `datamart-finance.staging.v_tix_affiliate_platform__corporate_infos`
+  ) i
+using(id)
+left join
+  `datamart-finance.sandbox_edp.corporate_account_test_new_corp`  ca
+    on replace(lower(c.name),'pt ','')=ltrim(rtrim(replace(lower(ca.Company_Name),'pt ','')))
+where
+  c.rn = 1
+  and i.rn = 1
+  and unique_id is not null
+  and is_active = 1
+  and is_suspend = 0
 )
 , b2b_corp as (
 select 
@@ -88,12 +159,20 @@ select
 except(rn)
   from (
   select 
-  vc.*
+  c.*
   , row_number() over(partition by workday_business_id order by workday_business_id) as rn
   , date(current_timestamp(), 'Asia/Jakarta') as processed_date
-from 
-  vc 
-  left join ms on vc.workday_business_id = ms.Customer_Reference_ID 
+from
+  (
+    select * from ac
+    union distinct
+    select * from vc
+    where workday_business_id not in 
+    (
+      select distinct workday_business_id from ac
+    )
+  ) as c 
+  left join ms on c.workday_business_id = ms.Customer_Reference_ID 
   where ms.Customer_Reference_ID is null )
 where rn = 1  
   /* b2b corporate - end */
