@@ -210,6 +210,7 @@ left join unnest(product_subcategory) as ps
     , account_number
     , account_holder_name
     , swift_code
+    , lower(payment_method) as payment_method
   from
     `datamart-finance.staging.v_hotel_payment_informations` 
     left join banks using (bank_id)
@@ -238,6 +239,7 @@ left join unnest(product_subcategory) as ps
     , string_agg(distinct account_holder_name) as hotel_account_holder_name
     , string_agg(distinct swift_code) as hotel_swift_code
     , string_agg(distinct postal_code) as hotel_postal_code
+    , string_agg(distinct payment_method) as payment_method
   from
     `datamart-finance.staging.v_hotels`
     left join hcc using (city_id)
@@ -266,6 +268,7 @@ left join unnest(product_subcategory) as ps
     , string_agg(distinct hotel_swift_code) as Supplier_Bank_BIC_SWIFT_Code
     , string_agg(distinct hotel_postal_code) as Address_Postal_Code
     , 'Hotel' as product_category
+    , string_agg(distinct payment_method) as payment_method
   from
     `datamart-finance.staging.v_order__tixhotel` oth
     left join hb using (hotel_itinerarynumber)
@@ -331,6 +334,7 @@ left join unnest(product_subcategory) as ps
           end 
         when string_agg(distinct ocd.order_type) = 'tixhotel' then 
           case
+            when string_agg(distinct oth.payment_method) = 'virtual_credit' then 'Credit_Card'
             when string_agg(distinct hpt.type) = 'deposit' then 'Deposit_Deduction'
             when string_agg(distinct hpt.type) = 'creditcard' then 'Credit_Card'
             else 'TT'
