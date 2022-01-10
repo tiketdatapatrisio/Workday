@@ -225,6 +225,35 @@ left join unnest(product_subcategory) as ps
   where
     status = 'active'
 )
+, htl as (
+  select
+    id
+    , name
+    , alias
+    , coalesce(cityId, city_id) as city_id
+    , coalesce(regionId, region_id) as region_id
+    , coalesce(countryId, country_id) as country_id
+    , postal_code
+    , address
+    , active_status
+  from
+    `datamart-finance.staging.v_hotels`
+  left join
+    (
+      select
+        distinct
+        publicid as public_id
+        , cityId
+        , regionId
+        , countryId
+      from
+        `datamart-finance.staging.v_hotel_core_hotel_neat`
+      where
+        updatedDate >= (select filter2 from fd)
+        and updatedDate < (select filter3 from fd)
+    )
+    using(public_id)
+)
 , htls as (
   select
     id as hotel_id_hb
@@ -241,7 +270,7 @@ left join unnest(product_subcategory) as ps
     , string_agg(distinct postal_code) as hotel_postal_code
     , string_agg(distinct payment_method) as payment_method
   from
-    `datamart-finance.staging.v_hotels`
+    htl
     left join hcc using (city_id)
     left join hcr using (region_id)
     left join hcct using (country_id)
