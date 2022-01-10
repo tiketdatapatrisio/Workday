@@ -155,6 +155,9 @@ fd as (
         when product_primary_category in ('beauty_wellness','class_workshop','culinary','food_drink','game_hobby','tour','travel_essential') then 'Activity'
         when product_primary_category = 'event' then 'Event'
         when product_primary_category = 'transport' and product_supplier = 'Railink' then 'Train' 
+        when product_primary_category = 'transport'
+          and lower(product_name) like '%rental%sewa motor%'
+          then 'Car'
         when product_primary_category = 'transport' 
         and 
           ( string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) like '%airport%'

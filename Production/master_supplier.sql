@@ -42,13 +42,16 @@ fd as (
 )
 , evoo as ( /*new datasource event/TTD @7 Jan 2021*/
   select
-   * except (product_subcategory,ps)
+   * except (product_subcategory,product_value,ps)
    , string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) as product_subcategory
    , case
         when product_primary_category in ('attraction','playground') then 'Attraction'
         when product_primary_category in ('beauty_wellness','class_workshop','culinary','food_drink','game_hobby','tour','travel_essential') then 'Activity'
         when product_primary_category = 'event' then 'Event'
-        when product_primary_category = 'transport' and supplier_name = 'Railink' then 'Train' 
+        when product_primary_category = 'transport' and supplier_name = 'Railink' then 'Train'
+        when product_primary_category = 'transport'
+          and string_agg(distinct lower(trim(product_value))) like '%rental%sewa motor%'
+          then 'Car'
         when product_primary_category = 'transport' 
           and 
           ( string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) like '%airport%'  
@@ -68,6 +71,7 @@ fd as (
       from (
         select
           safe_cast(coreorderid as int64) as order_id
+          , json_extract_scalar (product_translations, '$.product_translations[0].title') as product_value
           , case
               when trim(product_supplierCode) = 'S2' then '23196226'
               when trim(product_supplierCode) = 'S3' then '33505623'
@@ -96,7 +100,7 @@ fd as (
    where
       rn = 1
     group by
-      product_subcategories,supplier_id,1,2,3,4,5
+      product_subcategories,supplier_id,1,2,3,4,5,6
 )
 left join unnest(product_subcategory) as ps
   group by
