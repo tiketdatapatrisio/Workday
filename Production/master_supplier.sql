@@ -283,6 +283,30 @@ left join unnest(product_subcategory) as ps
   group by
     1
 )
+, ot as (
+  select
+    order_id
+    , coalesce(itinerary_id, hotel_itinerarynumber) as hotel_itinerarynumber
+    , room_source
+  from
+    `datamart-finance.staging.v_order__tixhotel`
+  left join
+    (
+      select
+        safe_cast(OrderId as int64) as order_id
+        , itineraryId as itinerary_id
+      from
+        `datamart-finance.staging.v_hotel_cart_book`
+      where
+        createdDate >= (select filter2 from fd)
+        and lower(status) not in ('canceled','pending')
+    )
+    using(order_id)
+  where
+    created_timestamp >= (select filter2 from fd)
+    and created_timestamp < (select filter3 from fd)
+    and room_source = 'TIKET'
+)
 , oth as (
   select
     order_id
@@ -302,13 +326,9 @@ left join unnest(product_subcategory) as ps
     , 'Hotel' as product_category
     , string_agg(distinct payment_method) as payment_method
   from
-    `datamart-finance.staging.v_order__tixhotel` oth
+    ot
     left join hb using (hotel_itinerarynumber)
     left join htls using (hotel_id_hb)
-  where
-    created_timestamp >= (select filter2 from fd)
-    and created_timestamp < (select filter3 from fd)
-    and room_source = 'TIKET'
   group by
     1
 )
