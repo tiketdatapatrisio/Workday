@@ -45,7 +45,85 @@ fd as (
   from
     fact_product
 )
-, fact_baggage as (
+, fact_flight_addons as ( /* EDP 16 NOV 2021: Extract addons flight / rapid test new data*/
+  select
+    Company
+    , invoice_currency
+    , supplier_reference_id
+    , invoice_date
+    , order_id
+    , order_detail_id
+    , due_date
+    , order_detail_name
+    , spend_category
+    , sum(quantity) as quantity
+    , sum(total_line_amount) as total_line_amount
+    , currency_conversion
+    , booking_code
+    , product_category
+    , product_provider
+    , deposit_flag
+    , event_name
+    , payment_handling
+    , on_hold_status
+    , memo
+    , customer_reference_id
+  from
+  (
+  select
+    Company
+    , invoice_currency
+    , case   
+        when lower(json_extract_scalar(hj,'$.vendor')) = 'siloam' then '34276792'
+        when lower(json_extract_scalar(hj,'$.desc')) like '%bumame%' then '34423442'
+        when lower(json_extract_scalar(hj,'$.desc')) like '%halodoc%' then 'VR-00015459'
+        when lower(json_extract_scalar(hj,'$.desc')) like '%farma%' then '34305569'
+        else supplier_reference_id
+      end as supplier_reference_id
+    , invoice_date
+    , order_id
+    , order_detail_id
+    , case 
+        when invoice_date > schedule_date then invoice_date
+        else schedule_date
+      end as due_date
+    , order_detail_name
+    , case
+        when lower(json_extract_scalar(hj,'$.vendor')) = 'lion' then 'Tes_Covid'
+        else 'Rapid_Test'
+      end as spend_category
+    , halodoc_pax_count as quantity
+    , safe_cast(json_extract_scalar(hj,'$.value') as float64) as total_line_amount
+    , currency_conversion
+    , booking_code
+    , product_category
+    , case
+        when lower(json_extract_scalar(hj,'$.vendor')) = 'siloam' then 'Siloam'
+        when lower(json_extract_scalar(hj,'$.desc')) like '%bumame%' then 'Bumame_Farmasi'
+        when lower(json_extract_scalar(hj,'$.desc')) like '%halodoc%' then 'Halodoc'
+        when lower(json_extract_scalar(hj,'$.desc')) like '%farma%' then 'Kimia_Farma'
+        else product_provider
+      end as product_provider
+    , deposit_flag
+    , event_name
+    , null as payment_handling
+    , case 
+        when deposit_flag = 'Non deposit' then 'Yes'
+        else 'No'
+      end as on_hold_status
+    , memo
+    , customer_reference_id
+  from
+    fact_product
+  cross join 
+       unnest(json_extract_array(addons_flight_json)) as hj
+  where
+    halodoc_sell_price_amount > 0
+    and lower(json_extract_scalar(hj,'$.vendor')) = 'lion' /* breakdown AP rapidtest for vendor lion only*/
+  )
+  group by 1,2,3,4,5,6,7,8,9,12,13,14,15,16,17,18,19,20,21 /* need group by for addons from smartroundtrip transactions - 118784547*/
+)
+, fact_flight_ancillary as (
   select
     Company
     , invoice_currency
@@ -58,9 +136,14 @@ fd as (
         else schedule_date
       end as due_date
     , order_detail_name
-    , 'Bagage' as spend_category
+    , case
+          when json_extract_scalar(afj,'$.category') = 'meals' then 'Meals_Flight'
+          when json_extract_scalar(afj,'$.category') = 'seat_selection' then 'Seat_Flight'
+          when json_extract_scalar(afj,'$.category') = 'baggage' then 'Bagage'
+          else 'Ticket'
+        end as spend_category
     , 1 as quantity
-    , baggage_fee as total_line_amount
+    , safe_cast(json_extract_scalar(afj,'$.value') as float64) as total_line_amount
     , currency_conversion
     , booking_code
     , product_category
@@ -76,7 +159,8 @@ fd as (
     , customer_reference_id
   from
     fact_product
-  where baggage_fee > 0
+    cross join 
+       unnest(json_extract_array(ancillary_flight_json)) as afj
 )
 , fact_add_ons_hotel as (
   select
@@ -112,12 +196,82 @@ fd as (
     cross join 
        unnest(add_ons_hotel_detail_array) as add_ons_hotel
 )
+/* EDP 01 Des,2021: breakdown addons car data */
+, fact_addons_car as (
+  select
+    Company
+    , invoice_currency
+    , supplier_reference_id
+    , invoice_date
+    , order_id
+    , order_detail_id
+    , due_date
+    , order_detail_name
+    , spend_category
+    , sum(quantity) as quantity
+    , sum(total_line_amount) as total_line_amount
+    , currency_conversion
+    , booking_code
+    , product_category
+    , product_provider
+    , deposit_flag
+    , event_name
+    , payment_handling
+    , on_hold_status
+    , string_agg(distinct memo) as memo
+    , customer_reference_id
+  from
+  (
+    select
+      Company
+      , invoice_currency
+      , supplier_reference_id
+      , invoice_date
+      , order_id
+      , order_detail_id
+      , case 
+          when invoice_date > schedule_date then invoice_date
+          else schedule_date
+        end as due_date
+      , order_detail_name
+      , case
+            when json_extract_scalar(acj,'$.category') = 'paid_facility' then 'Add_On_Special'
+          else 'Add_On_Zone'
+          end as spend_category
+      , 1 as quantity
+      , safe_cast(json_extract_scalar(acj,'$.value') as float64) as total_line_amount
+      , currency_conversion
+      , booking_code
+      , product_category
+      , product_provider
+      , deposit_flag
+      , event_name
+      , null as payment_handling
+      , case 
+          when deposit_flag = 'Non deposit' then 'Yes'
+          else 'No'
+        end as on_hold_status
+      , memo
+      , customer_reference_id
+    from
+      fact_product
+      cross join 
+         unnest(json_extract_array(addons_car_json)) as acj
+    where
+      addons_car_json is not null
+  )
+  group by 1,2,3,4,5,6,7,8,9,12,13,14,15,16,17,18,19,21
+)
 , fact as (
 select * from fact_vertical
 union all
-select * from fact_baggage
+select * from fact_flight_ancillary
+union all
+select * from fact_flight_addons
 union all
 select * from fact_add_ons_hotel
+union all
+select * from fact_addons_car
 )
 , tr as (
   select 
