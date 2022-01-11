@@ -254,7 +254,6 @@ left join unnest(product_subcategory) as ps
         `datamart-finance.staging.v_hotel_core_hotel_neat`
       where
         updatedDate >= (select filter2 from fd)
-        and updatedDate < (select filter3 from fd)
     )
     using(public_id)
 )
