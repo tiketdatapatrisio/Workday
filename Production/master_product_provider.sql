@@ -129,6 +129,29 @@ fd as (
   group by
     1
 )
+, ot as (
+  select
+    order_id
+    , coalesce(itinerary_id, hotel_itinerarynumber) as hotel_itinerarynumber
+  from
+    `datamart-finance.staging.v_order__tixhotel`
+  left join
+    (
+      select
+        safe_cast(OrderId as int64) as order_id
+        , itineraryId as itinerary_id
+      from
+        `datamart-finance.staging.v_hotel_cart_book`
+      where
+        createdDate >= (select filter2 from fd)
+        and lower(status) not in ('canceled','pending')
+    )
+    using(order_id)
+  where
+    created_timestamp >= (select filter2 from fd)
+    and created_timestamp < (select filter3 from fd)
+    and room_source = 'TIKET'
+)
 , oth as (
   select
     order_id
@@ -136,13 +159,9 @@ fd as (
     , string_agg(distinct htls.hotel_name_hb) as product_provider_name
     , 'Hotel' as product_category
   from
-    `datamart-finance.staging.v_order__tixhotel` oth
+    ot
     left join hb using (hotel_itinerarynumber)
     left join htls using (hotel_id_hb)
-  where
-    created_timestamp >= (select filter2 from fd)
-    and created_timestamp < (select filter3 from fd) /* */
-    and room_source = 'TIKET'
   group by
     1
 )
@@ -155,6 +174,9 @@ fd as (
         when product_primary_category in ('beauty_wellness','class_workshop','culinary','food_drink','game_hobby','tour','travel_essential') then 'Activity'
         when product_primary_category = 'event' then 'Event'
         when product_primary_category = 'transport' and product_supplier = 'Railink' then 'Train' 
+        when product_primary_category = 'transport'
+          and lower(product_name) like '%rental%sewa motor%'
+          then 'Car'
         when product_primary_category = 'transport' 
         and 
           ( string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) like '%airport%'

@@ -42,13 +42,16 @@ fd as (
 )
 , evoo as ( /*new datasource event/TTD @7 Jan 2021*/
   select
-   * except (product_subcategory,ps)
+   * except (product_subcategory,product_value,ps)
    , string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) as product_subcategory
    , case
         when product_primary_category in ('attraction','playground') then 'Attraction'
         when product_primary_category in ('beauty_wellness','class_workshop','culinary','food_drink','game_hobby','tour','travel_essential') then 'Activity'
         when product_primary_category = 'event' then 'Event'
-        when product_primary_category = 'transport' and supplier_name = 'Railink' then 'Train' 
+        when product_primary_category = 'transport' and supplier_name = 'Railink' then 'Train'
+        when product_primary_category = 'transport'
+          and string_agg(distinct lower(trim(product_value))) like '%rental%sewa motor%'
+          then 'Car'
         when product_primary_category = 'transport' 
           and 
           ( string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) like '%airport%'  
@@ -68,6 +71,7 @@ fd as (
       from (
         select
           safe_cast(coreorderid as int64) as order_id
+          , json_extract_scalar (product_translations, '$.product_translations[0].title') as product_value
           , case
               when trim(product_supplierCode) = 'S2' then '23196226'
               when trim(product_supplierCode) = 'S3' then '33505623'
@@ -96,7 +100,7 @@ fd as (
    where
       rn = 1
     group by
-      product_subcategories,supplier_id,1,2,3,4,5
+      product_subcategories,supplier_id,1,2,3,4,5,6
 )
 left join unnest(product_subcategory) as ps
   group by
@@ -225,6 +229,34 @@ left join unnest(product_subcategory) as ps
   where
     status = 'active'
 )
+, htl as (
+  select
+    id
+    , name
+    , alias
+    , coalesce(cityId, city_id) as city_id
+    , coalesce(regionId, region_id) as region_id
+    , coalesce(countryId, country_id) as country_id
+    , postal_code
+    , address
+    , active_status
+  from
+    `datamart-finance.staging.v_hotels`
+  left join
+    (
+      select
+        distinct
+        publicid as public_id
+        , cityId
+        , regionId
+        , countryId
+      from
+        `datamart-finance.staging.v_hotel_core_hotel_neat`
+      where
+        updatedDate >= (select filter2 from fd)
+    )
+    using(public_id)
+)
 , htls as (
   select
     id as hotel_id_hb
@@ -241,7 +273,7 @@ left join unnest(product_subcategory) as ps
     , string_agg(distinct postal_code) as hotel_postal_code
     , string_agg(distinct payment_method) as payment_method
   from
-    `datamart-finance.staging.v_hotels`
+    htl
     left join hcc using (city_id)
     left join hcr using (region_id)
     left join hcct using (country_id)
@@ -250,6 +282,30 @@ left join unnest(product_subcategory) as ps
     active_status >= 0
   group by
     1
+)
+, ot as (
+  select
+    order_id
+    , coalesce(itinerary_id, hotel_itinerarynumber) as hotel_itinerarynumber
+    , room_source
+  from
+    `datamart-finance.staging.v_order__tixhotel`
+  left join
+    (
+      select
+        safe_cast(OrderId as int64) as order_id
+        , itineraryId as itinerary_id
+      from
+        `datamart-finance.staging.v_hotel_cart_book`
+      where
+        createdDate >= (select filter2 from fd)
+        and lower(status) not in ('canceled','pending')
+    )
+    using(order_id)
+  where
+    created_timestamp >= (select filter2 from fd)
+    and created_timestamp < (select filter3 from fd)
+    and room_source = 'TIKET'
 )
 , oth as (
   select
@@ -270,13 +326,9 @@ left join unnest(product_subcategory) as ps
     , 'Hotel' as product_category
     , string_agg(distinct payment_method) as payment_method
   from
-    `datamart-finance.staging.v_order__tixhotel` oth
+    ot
     left join hb using (hotel_itinerarynumber)
     left join htls using (hotel_id_hb)
-  where
-    created_timestamp >= (select filter2 from fd)
-    and created_timestamp < (select filter3 from fd)
-    and room_source = 'TIKET'
   group by
     1
 )
