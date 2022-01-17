@@ -62,7 +62,7 @@ select
    /* , coalesce(Concat('"',safe_cast(round(total_line_amount,2) as string),'"'), '""') as total_line_amount -- 08 April 2021, for currency JPY & VND total line amount must be rounding, EDP*/
     , coalesce(Concat('"',
         case
-          when invoice_currency in ('JPY', 'VND') then safe_cast(round(total_line_amount,0) as string)
+          when invoice_currency in ('JPY', 'VND','KRW') then safe_cast(round(total_line_amount,0) as string)
           else safe_cast(round(total_line_amount,2) as string)
           end
           ,'"'), '""') as total_line_amount
