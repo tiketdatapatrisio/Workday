@@ -112,7 +112,7 @@ fd as (
     , string_agg(distinct airlines_real_name) as airlines_real_name
     , 'Flight' as flight_product_category
   from
-    `datamart-finance.staging.v_airlines_code` 
+    `datamart-finance.staging.v_flight__airlines` 
   group by
     1
 )
