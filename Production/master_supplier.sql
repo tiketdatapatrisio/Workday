@@ -45,7 +45,7 @@ fd as (
    * except (product_subcategory,product_value,ps)
    , string_agg(distinct lower(trim(json_extract_scalar(ps,'$.code')))) as product_subcategory
    , case
-        when product_primary_category in ('attraction','playground','sport_outdoor') then 'Attraction'
+        when product_primary_category in ('attraction','playground','sport_outdoor','video_rental') then 'Attraction'
         when product_primary_category in ('beauty_wellness','class_workshop','culinary','food_drink','game_hobby','tour','travel_essential','covid19_test') then 'Activity'
         when product_primary_category = 'event' then 'Event'
         when product_primary_category = 'transport' and supplier_name = 'Railink' then 'Train'
