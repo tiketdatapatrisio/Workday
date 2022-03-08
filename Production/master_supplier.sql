@@ -220,14 +220,25 @@ left join unnest(product_subcategory) as ps
     left join banks using (bank_id)
 )
 , hpt as (
+  /* select
+     distinct
+     business_id as hotel_id
+     , type
+   from
+     `datamart-finance.staging.v_hotel__payment_type` 
+   where
+     status = 'active' */
+  /*EDP, 8 Maret 2022 : migrated to new data source*/
   select
-    distinct
-    business_id as hotel_id
-    , type
-  from
-    `datamart-finance.staging.v_hotel__payment_type` 
-  where
-    status = 'active'
+     distinct
+     hotel_id
+     , 'deposit' as type
+   from
+     `datamart-finance.staging.v_hotel_softblocks` 
+   where
+      contract_status is true
+   and 
+      is_deleted is false
 )
 , htl as (
   select
@@ -388,7 +399,7 @@ left join unnest(product_subcategory) as ps
           case
             when string_agg(distinct oth.payment_method) = 'virtual_credit' then 'Credit_Card'
             when string_agg(distinct hpt.type) = 'deposit' then 'Deposit_Deduction'
-            when string_agg(distinct hpt.type) = 'creditcard' then 'Credit_Card'
+           /* when string_agg(distinct hpt.type) = 'creditcard' then 'Credit_Card'*/
             else 'TT'
           end
       end as Default_Payment_Type
