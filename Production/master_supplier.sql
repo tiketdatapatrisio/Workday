@@ -383,7 +383,7 @@ left join unnest(product_subcategory) as ps
     , 'Credit_Card' Accepted_Payment_Types_2
     , 'PG_In_Transit' Accepted_Payment_Types_3
     , 'TT' Accepted_Payment_Types_4
-    , '' Accepted_Payment_Types_5
+    , 'Manual' Accepted_Payment_Types_5
     , case 
         when string_agg(distinct ocd.order_type) = 'car' then 
           case 
