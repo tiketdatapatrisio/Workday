@@ -61,7 +61,7 @@ fd as (
         then 'Car' 
         when product_primary_category = 'transport' then 'Activity'
         when product_primary_category = 'hotel' then 'Hotel'
-        else product_primary_category
+        else 'Event' /*product_primary_category*/
       end as supplier_category
     from
     (
