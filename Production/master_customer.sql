@@ -144,7 +144,7 @@ left join
   ) i
 using(id)
 left join
-  `datamart-finance.sandbox_edp.corporate_account_test_new_corp`  ca
+  `datamart-finance.staging.v_corporate_account`  ca
     on replace(lower(c.name),'pt ','')=ltrim(rtrim(replace(lower(ca.Company_Name),'pt ','')))
 where
   c.rn = 1
