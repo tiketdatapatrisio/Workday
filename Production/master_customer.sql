@@ -142,7 +142,7 @@ left join
     from
       `datamart-finance.staging.v_tix_affiliate_platform__corporate_infos`
   ) i
-using(id)
+on c.id = i.corporate_id
 left join
   `datamart-finance.staging.v_corporate_account`  ca
     on replace(lower(c.name),'pt ','')=ltrim(rtrim(replace(lower(ca.Company_Name),'pt ','')))
