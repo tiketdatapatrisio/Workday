@@ -414,7 +414,7 @@ left join unnest(product_subcategory) as ps
         else ''
       end as Address_Effective_Date
     , ifnull(oth.country_code,'') as Address_Country_Code
-    , coalesce(REPLACE(address_name,'\n',''),'') as Address_Line_1
+    , coalesce(if(oth.country_code is not null and address_name is not null, REPLACE(address_name,'\n',''), ''),'') as Address_Line_1
     , '' Address_Line_2
     , '' Address_City_Subdivision_2
     , '' Address_City_Subdivision_1
@@ -536,40 +536,40 @@ left join unnest(product_subcategory) as ps
         else ''
       end as Address_Region_Subdivision_1
     , ifnull(region_code,'') as Address_Region_Code
-    , ifnull(oth.Address_Postal_Code, '') Address_Postal_Code
+    , ifnull(if(oth.country_code is not null and address_name is not null, oth.Address_Postal_Code, ''), '') Address_Postal_Code
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 then (ifnull(oth.country_code,''))
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null then (ifnull(oth.country_code,''))
         else ''
       end as Supplier_Bank_Country
     , '' Supplier_Bank_Currency
     , '' Supplier_Bank_Account_Nickname
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 then 'SA'
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null then 'SA'
         else '' 
       end as Supplier_Bank_Account_Type
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 then ifnull(Supplier_Bank_Name,'')
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null then ifnull(Supplier_Bank_Name,'')
         else ''
       end as Supplier_Bank_Name
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 then 'XXX'
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null then 'XXX'
         else ''
       end as Supplier_Bank_ID_Routing_Number
     , '' Supplier_Bank_Branch_ID
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 then Supplier_Bank_Branch_Name
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null then Supplier_Bank_Branch_Name
         else ''
       end as Supplier_Bank_Branch_Name
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 then Supplier_Bank_Account_Number
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null then Supplier_Bank_Account_Number
         else ''
       end as Supplier_Bank_Account_Number
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 then Supplier_Bank_Account_Name
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null then Supplier_Bank_Account_Name
         else ''
       end as Supplier_Bank_Account_Name
     , case
-        when length(trim(Supplier_Bank_Account_Number)) > 1 and REGEXP_CONTAINS(Supplier_Bank_BIC_SWIFT_Code, r'^[a-zA-Z]+$') then ifnull(upper(Supplier_Bank_BIC_SWIFT_Code), '')
+        when length(trim(Supplier_Bank_Account_Number)) > 1 and oth.country_code is not null and address_name is not null and REGEXP_CONTAINS(Supplier_Bank_BIC_SWIFT_Code, r'^[a-zA-Z]+$') then ifnull(upper(Supplier_Bank_BIC_SWIFT_Code), '')
         else ''
       end as Supplier_Bank_BIC_SWIFT_Code
     , max(payment_datetime) as max_payment_datetime
