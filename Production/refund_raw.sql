@@ -2,12 +2,25 @@ with
 fd as (
   select
     filter1
-    , date_add(filter1, interval -365 day) as filter2
+    , date_add(filter1, interval -3 day) as filter2
+    , date_add(filter1, interval -365 day) as filter3
   from
   (
     select
       timestamp_add(timestamp(date(current_timestamp(),'Asia/Jakarta')), interval -31 hour) as filter1
   )
+)
+, lsw as (
+  select
+    distinct order_id
+    , order_detail_id
+    , true as is_sent_flag
+  from
+    `datamart-finance.datasource_workday.log_sent_to_workday`
+  where
+    calculation_type_name = 'supplier_invoice_refund'
+  group by
+    1,2
 )
 , amd as (
   select
@@ -79,7 +92,7 @@ fd as (
     tro join `datamart-finance.staging.v_hotel_cart_book` on order_id = safe_cast(OrderId as int64)
     left join unnest(detail_room.cancellationPoliciesV3.policies.list) as policies
   where
-    createdDate >= (select filter2 from fd)
+    createdDate >= (select filter3 from fd)
   )
 )
 , hpt as (
@@ -181,6 +194,9 @@ fd as (
     and date(datetime(refundRequestDateTime,'Asia/Jakarta')) = date(datetime(refund_request_date,'Asia/Jakarta'))
   left join ocf
     using(order_detail_id)
+  left join lsw
+    on coalesce(referenceId, refundOptOrderId) = lsw.order_id
+    and refundId = lsw.order_detail_id
   where
     lower(refundStatus) <> 'rejected'
     and refundPaymentType not in ('AIRLINES_VOUCHER', 'TIX_POINT')
@@ -194,7 +210,9 @@ fd as (
           or lower(partnerStatus) not like '%fail%'
           or partnerStatus is null
         )
-    and date(refundRequestDateTime,'Asia/Jakarta') = date((select filter1 from fd),'Asia/Jakarta')
+    and date(refundRequestDateTime,'Asia/Jakarta')
+      between date((select filter2 from fd),'Asia/Jakarta') and date((select filter1 from fd),'Asia/Jakarta')
+    and is_sent_flag is null
   group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25
 )
 , ci as (

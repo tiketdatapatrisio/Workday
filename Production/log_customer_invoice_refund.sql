@@ -5,10 +5,9 @@ lsw as (
     , order_detail_id
     , true as is_sent_flag
   from
-    `datamart-finance.sandbox_edp.log_sent_to_workday`
+    `datamart-finance.datasource_workday.log_sent_to_workday`
   where
     calculation_type_name = 'customer_invoice_refund'
-    and date(created_timestamp) >= date(current_timestamp(),'Asia/Jakarta')
   group by
     1,2
 )
@@ -20,10 +19,12 @@ lsw as (
     , sales_pax
     , si_amount
   from
-    `datamart-finance.sandbox_edp.refund_raw`
+    `datamart-finance.datasource_workday.refund_raw`
   where
-    date(refund_request_date) = date_add(date(current_timestamp(), 'Asia/Jakarta'), interval -1 day)
-    and Company = 'GTN_SGP'
+    Company = 'GTN_SGP'
+    and date(refund_request_date) between
+      date_add(date(current_timestamp(),'Asia/Jakarta'), interval -4 day)
+      and date_add(date(current_timestamp(),'Asia/Jakarta'), interval -1 day)
   qualify row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) = 1
 )
 , tr2 as (
@@ -55,7 +56,8 @@ lsw as (
     tr
     left join lsw using (order_id, order_detail_id)
   where 
-    all_issued_flag = 1 
+    all_issued_flag = 1
+    and is_sent_flag is null
     and tr.intercompany_json is not null
     and event_data_error_flag = 0 
     and pay_at_hotel_flag = 0 
