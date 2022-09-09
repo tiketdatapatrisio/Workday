@@ -2,13 +2,12 @@ with
 lsw as (
   select
     distinct order_id
-    , order_detail_id as refund_id
+    , order_detail_id
     , true as is_sent_flag
   from
-    `datamart-finance.sandbox_edp.log_sent_to_workday`
+    `datamart-finance.datasource_workday.log_sent_to_workday`
   where
     calculation_type_name = 'customer_invoice_refund'
-    and date(created_timestamp) >= date(current_timestamp(),'Asia/Jakarta')
   group by
     1,2
 )
@@ -20,10 +19,12 @@ lsw as (
     , sales_pax
     , si_amount
   from
-    `datamart-finance.sandbox_edp.refund_raw`
+    `datamart-finance.datasource_workday.refund_raw`
   where
-    date(refund_request_date) = date_add(date(current_timestamp(), 'Asia/Jakarta'), interval -1 day)
-    and Company = 'GTN_SGP'
+    Company = 'GTN_SGP'
+    and date(refund_request_date) between
+      date_add(date(current_timestamp(),'Asia/Jakarta'), interval -4 day)
+      and date_add(date(current_timestamp(),'Asia/Jakarta'), interval -1 day)
   qualify row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) = 1
 )
 , tr2 as (
@@ -75,6 +76,8 @@ lsw as (
     tr
   left join
     unnest (json_extract_array(intercompany_json)) as ij
+  left join 
+    lsw using (order_id, order_detail_id)
   where 
     all_issued_flag = 1 
     and tr.intercompany_json is not null
@@ -121,8 +124,8 @@ lsw as (
         when customer_type = 'Intercompany' then '' /*EDP, 21 Feb 2022 Request from Acc due date leave blank*/
         when customer_id in ('34272813', '32545767','34382690','34423384','34433582','34432620','34451081') then safe_cast(hotel_checkoutdate as string)        
         else '' end as string),'"'),'""') as due_date_override /* Customer Invoice Adjustment Integration (add 3 column: deposit_rev_category, intercompany, due_date_override) applies to data on 12 Nov 2020 ~EDP */
-    , 1 as order_by_for_workday
   from
     tr_intercompany
 )
 select * from intercompany
+order by payment_timestamp, order_id
