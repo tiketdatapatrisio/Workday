@@ -67,9 +67,9 @@ fd as (
     left join ocr using(order_id)
   where
     payment_id = 1
-    -- and payment_flag = 1
-    -- and payment_timestamp >= (select filter3 from fd)
-    -- and payment_timestamp < (select filter4 from fd) /*@wahyu 20220913 update because transactions using the web are still error payment_timestamp is null*/
+     /* and payment_flag = 1
+     and payment_timestamp >= (select filter3 from fd)
+     and payment_timestamp < (select filter4 from fd)*/ /*@wahyu 20220913 remove the filter to handle some null data issues*/
   group by
     order_id
 )
