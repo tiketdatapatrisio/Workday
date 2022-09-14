@@ -66,21 +66,36 @@ fd as (
    `datamart-finance.staging.v_order__payment`
     left join ocr using(order_id)
   where
-    payment_flag = 1
-    and payment_id = 1
-    and payment_timestamp >= (select filter3 from fd)
-    and payment_timestamp < (select filter4 from fd)
+    payment_id = 1
+    -- and payment_flag = 1
+    -- and payment_timestamp >= (select filter3 from fd)
+    -- and payment_timestamp < (select filter4 from fd) /*@wahyu 20220913 update because transactions using the web are still error payment_timestamp is null*/
   group by
     order_id
+)
+, tppt as (
+    select 
+      distinct
+      reference_id as order_id
+      , lower(string_agg(distinct paymentGateway)) as payment_gateway
+    FROM `datamart-finance.staging.v_tix_payment__payment_transaction` 
+    where 
+      createdDate >= (select filter3 from fd)
+      and createdDate < (select filter4 from fd)
+    group by 1
 )
 , occ as (
   select
     order_id
     , string_agg(distinct auth_code) as auth_code
-    , string_agg(distinct pg_name) as payment_gateway
+    , case
+        when string_agg(distinct pg_name) = '' then string_agg(distinct payment_gateway)
+        else string_agg(distinct pg_name)
+      end as payment_gateway
     , string_agg(distinct acquiring_bank) as acquiring_bank
   from
-   `datamart-finance.staging.v_order__credit_card` 
+   `datamart-finance.staging.v_order__credit_card` occ
+   left join tppt using (order_id)
   where
     payment_timestamp >= (select filter3 from fd)
     and payment_timestamp < (select filter4 from fd)
