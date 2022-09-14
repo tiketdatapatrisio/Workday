@@ -101,6 +101,14 @@ lsw as (
         )
         , struct
           (
+            'Insurance' as spend_category
+            , insurance_value as total_line_amount
+            , case when insurance_value <> 0 then true
+              else false end as valid_struct_flag
+            , 2 as data_order
+          )
+        , struct
+          (
             case
               when product_category = 'Others' then 'Retur_Others'
               when product_category = 'Hotel' then 'Retur_Hotel'
@@ -114,7 +122,7 @@ lsw as (
             , commission as total_line_amount
             , case when commission <> 0 then true
               else false end as valid_struct_flag
-            , 2 as data_order
+            , 3 as data_order
           )
         , struct
           (
@@ -125,7 +133,7 @@ lsw as (
             , subsidy as total_line_amount
             , case when subsidy <> 0 then true
               else false end as valid_struct_flag
-            , 3 as data_order
+            , 4 as data_order
           )
         , struct
           (
@@ -133,7 +141,7 @@ lsw as (
             , partner_commission as total_line_amount
             , case when partner_commission <> 0 then true
               else false end as valid_struct_flag
-            , 4 as data_order
+            , 5 as data_order
           )
         , struct
           (
@@ -146,7 +154,7 @@ lsw as (
             , upselling as total_line_amount
             , case when upselling <> 0 then true
               else false end as valid_struct_flag
-            , 5 as data_order
+            , 6 as data_order
           )
         , struct
           (
@@ -154,7 +162,7 @@ lsw as (
             , refund_fee as total_line_amount
             , case when refund_fee <> 0 then true
               else false end as valid_struct_flag
-            , 6 as data_order
+            , 7 as data_order
           )
         , struct
           (
@@ -162,7 +170,7 @@ lsw as (
             , admin_fee as total_line_amount
             , case when admin_fee <> 0 then true
               else false end as valid_struct_flag
-            , 7 as data_order
+            , 8 as data_order
           )
         , struct
           (
@@ -170,7 +178,7 @@ lsw as (
             , tiketpoint_value as total_line_amount
             , case when tiketpoint_value <> 0 then true
               else false end as valid_struct_flag
-            , 8 as data_order
+            , 9 as data_order
           )
         , struct
           (
@@ -178,7 +186,7 @@ lsw as (
             , promocode_value as total_line_amount
             , case when promocode_value <> 0 then true
               else false end as valid_struct_flag
-            , 9 as data_order
+            , 10 as data_order
           )
         , struct
           (
@@ -186,7 +194,7 @@ lsw as (
             , giftvoucher_value as total_line_amount
             , case when giftvoucher_value <> 0 then true
               else false end as valid_struct_flag
-            , 10 as data_order
+            , 11 as data_order
           )
         , struct
           (
@@ -194,7 +202,7 @@ lsw as (
             , payment_charge as total_line_amount
             , case when payment_charge <> 0 then true
               else false end as valid_struct_flag
-            , 11 as data_order
+            , 12 as data_order
           )
         , struct
           (
@@ -202,7 +210,7 @@ lsw as (
             , diff_refund as total_line_amount
             , case when diff_refund <> 0 then true
               else false end as valid_struct_flag
-            , 12 as data_order
+            , 13 as data_order
           )
       ] as info_array
   from
