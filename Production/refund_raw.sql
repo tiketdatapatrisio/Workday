@@ -55,7 +55,8 @@ fd as (
   from
     `datamart-finance.staging.v_tix_refund_refund_order`
   where
-    date(refundRequestDateTime,'Asia/Jakarta') = date((select filter1 from fd),'Asia/Jakarta')
+    date(refundRequestDateTime,'Asia/Jakarta')
+      between date((select filter2 from fd),'Asia/Jakarta') and date((select filter1 from fd),'Asia/Jakarta')
 )
 , hcb as (
   select
@@ -63,9 +64,15 @@ fd as (
     , charge
     , from_deadline
     , to_deadline
+    , after_deadline
     , if
         (
-          ifnull(tro_refund_request_date > from_deadline, true) and tro_refund_request_date <= to_deadline
+          if
+            (
+              charge <> 0 and after_deadline is null and tro_refund_request_date > to_deadline
+              , true
+              , ifnull(tro_refund_request_date > from_deadline, true) and tro_refund_request_date <= to_deadline
+            )
           , tro_refund_request_date
           , null
         )
@@ -87,6 +94,17 @@ fd as (
         )
       ) as from_deadline
     , timestamp(replace(policies.element.deadline, 'UTC', '')) as to_deadline
+    , timestamp
+      (
+      lead
+        (
+          replace(policies.element.deadline, 'UTC', '')
+        )
+      over
+        (
+          partition by OrderId order by replace(policies.element.deadline, 'UTC', '')
+        )
+      ) as after_deadline
     , tro_refund_request_date
   from
     tro join `datamart-finance.staging.v_hotel_cart_book` on order_id = safe_cast(OrderId as int64)
@@ -254,6 +272,7 @@ fd as (
     , payment_charge
     , payment_amount
     , total_ancillary_flight
+    , insurance_value
     , case
         when order_type in ('event', 'car') and product_category is null and cogs = 0 then false
         when issued_status = 'issued' then true
@@ -305,22 +324,24 @@ fd as (
 )
 , combine as (
   select
-    * except(total_pax, quantity, hotel_cancellation_fee, admin_fee, memo)
+    * except(total_pax, quantity, hotel_cancellation_fee, insurance_value, admin_fee, memo)
     , total_pax as refund_pax
     , safe_cast(if(quantity=0,1,quantity) as int64) as sales_pax
     , case
-        when hotel_cancellation_fee = refund_amount and hotel_cancellation_fee/payment_amount <> 0.5 then 0
+        when hotel_cancellation_fee = refund_amount and hotel_cancellation_fee/if(payment_amount=0,1,payment_amount) <> 0.5 then 0
         when
           hotel_cancellation_fee
           + if(lower(refund_payment_type) = 'bank_transfer' and product_category in ('Hotel', 'Hotel_NHA'),-5000,admin_fee)
           = refund_amount
-          and hotel_cancellation_fee/payment_amount <> 0.5
+          and hotel_cancellation_fee/if(payment_amount=0,1,payment_amount) <> 0.5
           then 0
-        when hotel_cancellation_fee = si_amount then 0
+        when hotel_cancellation_fee = (si_amount * currency_conversion) then 0
+        when payment_amount + ifnull(admin_fee, 0) = refund_amount then 0
         else hotel_cancellation_fee
       end as hotel_cancellation_fee
     , case when lower(refund_payment_type) = 'bank_transfer' and product_category in ('Hotel', 'Hotel_NHA') then -5000
       else admin_fee end as admin_fee
+    , if(product_category='Hotel_NHA', insurance_value, 0) as insurance_value
     , case when product_category is not null then
         concat(
           order_id
@@ -415,7 +436,7 @@ fd as (
       else product_provider end as product_provider
     , refund_amount
     , if(product_category='Flight',coalesce(refund_flight_amount,estimated_refund_flight,0)
-      , case when hotel_cancellation_fee <> 0 and payment_amount <> 0 then round((1-(hotel_cancellation_fee/(payment_amount-promocode_value)))*si_amount)           else round(si_amount * currency_conversion) end) +
+      , case when hotel_cancellation_fee <> 0 and payment_amount <> 0 then round((1-(hotel_cancellation_fee/(payment_amount-promocode_value)))*(si_amount * currency_conversion))           else round(si_amount * currency_conversion) end) +
       refund_fee +
       if(lower(payment_type_bank) = 'pg_indodana', 0, admin_fee) +
       case when hotel_cancellation_fee <> 0 and payment_amount <> 0 then round((1-(hotel_cancellation_fee/(payment_amount-promocode_value)))*commission)
@@ -437,14 +458,16 @@ fd as (
       when is_partially_refund and refund_pax > 0 and tiketpoint_value is not null then round(refund_pax/safe_cast(sales_pax as int64)*tiketpoint_value)
       else ifnull(tiketpoint_value, 0) end +
       case when is_partially_refund and refund_pax > 0 and promocode_value is not null then round(refund_pax/safe_cast(sales_pax as int64)*promocode_value)
-      else ifnull(promocode_value, 0) end
+      else ifnull(promocode_value, 0) end +
+      case when is_partially_refund and refund_pax > 0 and insurance_value is not null then round(refund_pax/safe_cast(sales_pax as int64)*insurance_value)
+      else ifnull(insurance_value, 0) end
       as total_breakdown_amount
     , if(refund_amount = coalesce(refund_flight_amount,estimated_refund_flight,0), true, false) as is_topup_match
     , refund_flight_amount
     , estimated_refund_flight
     , if(payment_status = 'PAID', true, false) as is_hotel_paid
     , hotel_cancellation_fee
-    , case when hotel_cancellation_fee <> 0 and payment_amount <> 0 then round((1-(hotel_cancellation_fee/(payment_amount-promocode_value)))*si_amount)
+    , case when hotel_cancellation_fee <> 0 and payment_amount <> 0 then round((1-(hotel_cancellation_fee/(payment_amount-promocode_value)))*(si_amount * currency_conversion))
       else round(si_amount * currency_conversion) end as si_amount
     , refund_fee
     , if(lower(payment_type_bank) = 'pg_indodana', 0, admin_fee) as admin_fee
@@ -468,6 +491,7 @@ fd as (
     , total_tiketpoint
     , case when is_partially_refund and refund_pax > 0 and promocode_value is not null then round(refund_pax/safe_cast(sales_pax as int64)*promocode_value)
       else promocode_value end as promocode_value
+    , insurance_value
     , case when hotel_cancellation_fee <> 0 and payment_amount <> 0 then round((1-(hotel_cancellation_fee/(payment_amount-promocode_value)))*payment_charge)
       when is_partially_refund and refund_pax > 0 and payment_charge is not null then round(refund_pax/safe_cast(sales_pax as int64)*payment_charge)
       else payment_charge end as payment_charge
@@ -792,6 +816,7 @@ fd as (
       else tiketpoint_value end as tiketpoint_value
     , case when product_category = 'Others' then 0
       else promocode_value end as promocode_value
+    , insurance_value
     , case when product_category = 'Others' then 0
       else payment_charge end as payment_charge
     , case when product_category = 'Others' then 0
@@ -1083,6 +1108,7 @@ fd as (
     , giftvoucher_value
     , tiketpoint_value
     , promocode_value
+    , insurance_value
     , payment_charge
     , payment_amount
     , order_payment_type

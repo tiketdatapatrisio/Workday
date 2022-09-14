@@ -25,7 +25,7 @@ lsw as (
 , refund as ( /*insert refund_id instead of order_detail_id*/
   select
   distinct
-    order_id
+    tr.order_id
     , refund_id as order_detail_id
     , null as payment_id
     , 'supplier_invoice_refund' as calculation_type_name

@@ -76,10 +76,11 @@ lsw as (
     tr
   left join
     unnest (json_extract_array(intercompany_json)) as ij
-  left join 
+  left join
     lsw using (order_id, order_detail_id)
   where 
-    all_issued_flag = 1 
+    all_issued_flag = 1
+    and is_sent_flag is null
     and tr.intercompany_json is not null
     and event_data_error_flag = 0 
     and pay_at_hotel_flag = 0 
