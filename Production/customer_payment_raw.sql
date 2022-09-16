@@ -67,17 +67,18 @@ fd as (
     left join ocr using(order_id)
   where
     payment_id = 1
-     /* and payment_flag = 1
+      and payment_flag = 1
      and payment_timestamp >= (select filter3 from fd)
-     and payment_timestamp < (select filter4 from fd)*/ /*@wahyu 20220913 remove the filter to handle some null data issues*/
+     and payment_timestamp < (select filter4 from fd) 
   group by
     order_id
 )
-, tppt as (
+, tppt as ( /*@wahyu 20220913 adding new datasource to get payment gateway data*/
     select 
       distinct
       reference_id as order_id
       , lower(string_agg(distinct paymentGateway)) as payment_gateway
+      , string_agg(distinct acquiringBank) as acquiringBank
     FROM `datamart-finance.staging.v_tix_payment__payment_transaction` 
     where 
       createdDate >= (select filter3 from fd)
@@ -92,7 +93,10 @@ fd as (
         when string_agg(distinct pg_name) = '' then string_agg(distinct payment_gateway)
         else string_agg(distinct pg_name)
       end as payment_gateway
-    , string_agg(distinct acquiring_bank) as acquiring_bank
+    , case
+        when string_agg(distinct acquiring_bank)= '' then string_agg(distinct acquiringBank) 
+        else string_agg(distinct acquiring_bank)
+      end as acquiring_bank 
   from
    `datamart-finance.staging.v_order__credit_card` occ
    left join tppt using (order_id)
