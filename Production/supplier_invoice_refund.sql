@@ -224,46 +224,39 @@ lsw as (
 )
 , refund as (
   select
-     coalesce(Concat('"',Company,'"'), '""') as Company
-    , coalesce(Concat('"',invoice_currency,'"'), '""') as invoice_currency
-    , coalesce(Concat('"',supplier_reference_id,'"'), '""') as supplier_reference_id
-    , coalesce(Concat('"',safe_cast(refund_request_date as string),'"'), '""') as invoice_date
-    , coalesce(Concat('"',safe_cast(order_id as string),'_RFD"'), '""') as order_id
-    , coalesce(Concat('"',safe_cast(refund_id as string),'"'), '""') as order_detail_id
-    , coalesce(Concat('"',safe_cast(due_date as string),'"'), '""') as due_date
-    , coalesce(Concat('"',
-        if(order_detail_name = '' or order_detail_name is null, refund_reason, order_detail_name),'"')
-        , '""')
-      as order_detail_name
-    , coalesce(Concat('"',spend_category,'"'), '""') as spend_category
-    , coalesce(Concat('"',safe_cast(quantity as string),'"'), '""') as quantity
-    , coalesce(Concat('"',safe_cast(info_array.total_line_amount as string),'"'), '""') as total_line_amount
-    , coalesce(Concat('"',
-        case
-          when Company <> 'GTN_IDN' then ''
-          else safe_cast(round(currency_conversion,2) as string)
-        end
-      ,'"'), '""') as currency_conversion
-    , coalesce(Concat('"',if(booking_code <> '', booking_code, 'No booking code'),' - Refund"'), '""') as booking_code
-    , coalesce(Concat('"',product_category,'"'), '""') as product_category
-    , coalesce(Concat('"',product_provider,'"'), '""') as product_provider
-    , coalesce(Concat('"',deposit_flag,'"'), '""') as deposit_flag
-    , coalesce(Concat('"',
-        case
-          when product_category in ('Attraction','Activity','Event') then order_detail_name
-        end
-      ,'"'), '""') as event_name
-    , '""' as payment_handling
-    , coalesce(concat('"',on_hold_status,'"'),'""') as on_hold_status
-    , coalesce(concat('"'
-        , if(memo = '' or memo is null, safe_cast(order_id as string), memo)
-        , if(memo <> '', ' - Refund', '')
-        , if(
-            refund_split_code is not null and refund_split_code <> '' and refund_split_code <> '0'
-            , concat(' - Splitcode: ', refund_split_code)
-            , '')
-        , '"'),'""') as memo
-    , coalesce(concat('"',customer_reference_id,'"'),'""') as customer_reference_id
+     coalesce(Company, '') as Company
+    , coalesce(invoice_currency, '') as invoice_currency
+    , coalesce(supplier_reference_id, '') as supplier_reference_id
+    , coalesce(safe_cast(refund_request_date as string), '') as invoice_date
+    , coalesce(concat(safe_cast(order_id as string),'_RFD'), '') as order_id
+    , coalesce(safe_cast(refund_id as string), '') as order_detail_id
+    , coalesce(safe_cast(due_date as string), '') as due_date
+    , coalesce(if(order_detail_name = '' or order_detail_name is null, refund_reason, order_detail_name), '') as order_detail_name
+    , coalesce(spend_category, '') as spend_category
+    , coalesce(safe_cast(quantity as string), '0') as quantity
+    , coalesce(safe_cast(info_array.total_line_amount as string), '0') as total_line_amount
+    , coalesce(if(Company <> 'GTN_IDN', '', safe_cast(round(currency_conversion,2) as string)), '0') as currency_conversion
+    , coalesce(concat(if(booking_code <> '', booking_code, 'No booking code'),' - Refund'), '') as booking_code
+    , coalesce(product_category, '') as product_category
+    , coalesce(product_provider, '') as product_provider
+    , coalesce(deposit_flag, '') as deposit_flag
+    , if(product_category in ('Attraction','Activity','Event'), order_detail_name, '') as event_name
+    , '' as payment_handling
+    , coalesce(on_hold_status,'') as on_hold_status
+    , coalesce(
+      concat
+        (
+          if(memo = '' or memo is null, safe_cast(order_id as string), memo)
+          , if(memo <> '', ' - Refund', '')
+          , if
+              (
+                refund_split_code is not null and refund_split_code <> '' and refund_split_code <> '0'
+                , concat(' - Splitcode: ', refund_split_code)
+                , ''
+              )
+        )
+      ,'') as memo
+    , coalesce(customer_reference_id,'') as customer_reference_id
     , row_number() over (order by refund_request_date, order_id, order_detail_id, info_array.data_order) as rn
   from
     info

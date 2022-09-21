@@ -96,35 +96,35 @@ lsw as (
 )
 , intercompany as (
   select
-    coalesce(concat('"',safe_cast(order_id as string),'"'),'""') as order_id
-    , coalesce(concat('"',safe_cast(customer_id as string),'"'),'""') as company
-    , coalesce(concat('"',safe_cast(company as string),'"'),'""') as customer_id
-    , coalesce(concat('"',safe_cast(customer_type as string),'"'),'""') as customer_type
-    , coalesce(concat('"',safe_cast(selling_currency as string),'"'),'""') as selling_currency
-    , coalesce(concat('"',safe_cast(payment_timestamp as string),'"'),'""') as payment_timestamp
-    , coalesce(concat('"',safe_cast(revenue_category as string),'"'),'""') as revenue_category
-    , coalesce(concat('"',safe_cast(product_category as string),'"'),'""') as product_category
-    , coalesce(concat('"',safe_cast(round(selling_price,2) as string),'"'),'"0"') as selling_price
-    , coalesce(concat('"',safe_cast(product_provider as string),'"'),'""') as product_provider
-    , coalesce(concat('"',safe_cast(supplier as string),'"'),'""') as supplier
-    , coalesce(concat('"',safe_cast(quantity as string),'"'),'"0"') as quantity
-    , coalesce(concat('"',safe_cast(round(extended_amount,2) as string),'"'),'"0"') as extended_amount
-    , coalesce(concat('"',"'",safe_cast(authentication_code as string),'"'),'""') as authentication_code
-    , coalesce(concat('"',safe_cast(virtual_account as string),'"'),'""') as virtual_account
-    , coalesce(concat('"',safe_cast(giftcard_voucher as string),'"'),'""') as giftcard_voucher
-    , coalesce(concat('"',safe_cast(promocode_name as string),'"'),'""') as promocode_name
-    , coalesce(concat('"',"'",safe_cast(booking_code as string),'"'),'""') as booking_code
-    , coalesce(concat('"',"'",safe_cast(ticket_number as string),'"'),'""') as ticket_number
-    , coalesce(concat('"',safe_cast(payment_source as string),'"'),'""') as payment_source
-    , coalesce(concat('"',safe_cast(payment_gateway as string),'"'),'""') as payment_gateway
-    , coalesce(concat('"',safe_cast(payment_type_bank as string),'"'),'""') as payment_type_bank
-    , coalesce(concat('"',safe_cast(memo as string),'"'),'""') as memo
-    , "Deposit_Interco" as deposit_rev_category
-    , coalesce(concat('"',safe_cast('' as string),'"'),'""') as intercompany
-    , coalesce(concat('"',safe_cast(case
+    coalesce(safe_cast(order_id as string),'') as order_id
+    , coalesce(safe_cast(customer_id as string),'') as company
+    , coalesce(safe_cast(company as string),'') as customer_id
+    , coalesce(safe_cast(customer_type as string),'') as customer_type
+    , coalesce(safe_cast(selling_currency as string),'') as selling_currency
+    , coalesce(safe_cast(payment_timestamp as string),'') as payment_timestamp
+    , coalesce(safe_cast(revenue_category as string),'') as revenue_category
+    , coalesce(safe_cast(product_category as string),'') as product_category
+    , coalesce(safe_cast(round(selling_price,2) as string),'0') as selling_price
+    , coalesce(safe_cast(product_provider as string),'') as product_provider
+    , coalesce(safe_cast(supplier as string),'') as supplier
+    , coalesce(safe_cast(quantity as string),'0') as quantity
+    , coalesce(safe_cast(round(extended_amount,2) as string),'0') as extended_amount
+    , coalesce(concat("'",safe_cast(authentication_code as string)),'') as authentication_code
+    , coalesce(safe_cast(virtual_account as string),'') as virtual_account
+    , coalesce(safe_cast(giftcard_voucher as string),'') as giftcard_voucher
+    , coalesce(safe_cast(promocode_name as string),'') as promocode_name
+    , coalesce(concat("'",safe_cast(booking_code as string)),'') as booking_code
+    , coalesce(concat("'",safe_cast(ticket_number as string)),'') as ticket_number
+    , coalesce(safe_cast(payment_source as string),'') as payment_source
+    , coalesce(safe_cast(payment_gateway as string),'') as payment_gateway
+    , coalesce(safe_cast(payment_type_bank as string),'') as payment_type_bank
+    , coalesce(safe_cast(memo as string),'') as memo
+    , 'Deposit_Interco' as deposit_rev_category
+    , '' as intercompany
+    , coalesce(safe_cast(case
         when customer_type = 'Intercompany' then '' /*EDP, 21 Feb 2022 Request from Acc due date leave blank*/
         when customer_id in ('34272813', '32545767','34382690','34423384','34433582','34432620','34451081') then safe_cast(hotel_checkoutdate as string)        
-        else '' end as string),'"'),'""') as due_date_override /* Customer Invoice Adjustment Integration (add 3 column: deposit_rev_category, intercompany, due_date_override) applies to data on 12 Nov 2020 ~EDP */
+        else '' end as string),'') as due_date_override /* Customer Invoice Adjustment Integration (add 3 column: deposit_rev_category, intercompany, due_date_override) applies to data on 12 Nov 2020 ~EDP */
   from
     tr_intercompany
 )
