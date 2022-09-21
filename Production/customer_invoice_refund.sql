@@ -45,7 +45,7 @@ lsw as (
 )
 , tr_intercompany as (
   select
-    concat(order_id,'_RDF_',json_extract_scalar(ij,'$.pair_company')) as order_id
+    concat(order_id,'_RFD_',json_extract_scalar(ij,'$.pair_company')) as order_id
     , order_detail_id
     , concat('GTN_',json_extract_scalar(ij,'$.pair_company')) as company
     , concat('GTN_',json_extract_scalar(ij,'$.company')) as customer_id
