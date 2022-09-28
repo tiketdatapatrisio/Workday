@@ -224,6 +224,10 @@ fd as (
           or refundCustName is null
          )
     and (
+          lower(regexp_replace(refundCustName, '[^0-9a-zA-Z]+', '')) not like 'globaltiketnetworkpt%'
+          or refundCustName is null
+         )
+    and (
           lower(partnerStatus) like '%failed to validate json schema%'
           or lower(partnerStatus) not like '%fail%'
           or partnerStatus is null
@@ -242,8 +246,10 @@ fd as (
   select
     order_id
     , order_detail_id
+    , order_name_detail
     , payment_timestamp
     , booking_code
+    , ticket_number
     , quantity
     , commission+ifnull(total_add_ons_hotel_commission_amount,0) as commission
     , partner_commission
@@ -269,10 +275,18 @@ fd as (
         )
       as promocode_value
     , payment_type_bank
-    , payment_charge
+    , if(payment_charge <> 0 and cc_installment not in(3,6,12), payment_charge, 0) as payment_charge
     , payment_amount
     , total_ancillary_flight
-    , insurance_value
+    , if
+        (
+          insurance_name like '%Maximum Protection%'
+          or insurance_name like '%Premium Protection%'
+          or insurance_name like '%Standard Protection%'
+          , insurance_value
+          , 0
+        )
+      as insurance_value
     , case
         when order_type in ('event', 'car') and product_category is null and cogs = 0 then false
         when issued_status = 'issued' then true
@@ -342,19 +356,46 @@ fd as (
     , case when lower(refund_payment_type) = 'bank_transfer' and product_category in ('Hotel', 'Hotel_NHA') then -5000
       else admin_fee end as admin_fee
     , if(product_category='Hotel_NHA', insurance_value, 0) as insurance_value
-    , case when product_category is not null then
-        concat(
-          order_id
+    , concat
+        (
+          ifnull(safe_cast(order_id as string), '0') -- Order ID
           , '_'
-          , order_detail_id
+          , ifnull(safe_cast(order_detail_id as string), '0') -- Order Detail ID
           , '_'
-          , ifnull(booking_code, '')
+          , if(booking_code is not null and booking_code <> '', booking_code, '0') -- Kodebook/Itinerary
           , '_'
-          , ifnull(supplier_name, '')
+          , if(refund_split_code is not null and refund_split_code <> '', refund_split_code, '0') -- Split Code
           , '_'
-          , ifnull(order_detail_name, '')
+          , ifnull(supplier_name, '0') -- Supplier
+          , '_'
+          , trim
+              (
+                case -- Product Provider - Detail Room/Rute
+                  when product_category = 'Flight'
+                    then
+                      concat
+                        (
+                          ifnull(order_name_detail,'')
+                          , if(order_detail_name is not null, ' - ', '')
+                          , ifnull(order_detail_name,'')
+                        )
+                  when product_category in ('Hotel', 'Hotel_NHA')
+                      then
+                        concat
+                          (
+                            ifnull(order_detail_name,'')
+                            , if(order_name_detail is not null, ' - ', '')
+                            , ifnull(order_name_detail,'')
+                          )
+                  when product_category in ('Activity', 'Attraction', 'Event','Car', 'Train') then order_detail_name
+                  else '0'
+                end
+              )
+          , '_'
+          , if(ticket_number is not null and product_category = 'Flight', ticket_number, '0') -- Ticket Number
+          , '_Refund'
         )
-      else memo end as memo
+      as memo
   from
     rff
     left join amd using(order_id)
@@ -501,12 +542,7 @@ fd as (
     , is_deposit_flag
     , case when (not is_issued_flag or is_issued_flag is null) and refund_amount <> 0 then safe_cast(refund_booking_code as string)
       else trim(order_detail_name) end as order_detail_name
-    , case when (not is_issued_flag or is_issued_flag is null) and refund_amount <> 0 then safe_cast(
-        concat(order_id
-              , if(refund_booking_code = '' or refund_booking_code is null, '', '_')
-              , if(refund_booking_code = '' or refund_booking_code is null, '', refund_booking_code))
-        as string)
-      else trim(memo) end as memo
+    , memo
     , customer_reference_id
     , null as additional_info_json
     , ifnull(is_issued_flag, false) as is_issued_flag
@@ -650,7 +686,17 @@ fd as (
   from
     fact5
 )
-, fact7 as ( /* remove commission and subsidy */
+, fact7 as ( /* remove payment charge */
+  select
+    * except(payment_charge)
+    , case
+        when payment_charge <> 0 and diff_refund = 0 and total_breakdown_amount = refund_amount
+        then 0
+      else payment_charge end as payment_charge
+  from
+    fact6
+)
+, fact8 as ( /* remove commission and subsidy */
   select
     * except(total_breakdown_amount, diff_refund, commission, subsidy)
     , case when diff_refund <> 0 and refund_amount - (total_breakdown_amount - (commission+subsidy)) = 0
@@ -664,9 +710,9 @@ fd as (
     , case when diff_refund <> 0 and refund_amount - (total_breakdown_amount - (commission+subsidy)) = 0 then 0
       else subsidy end subsidy
   from
-    fact6
+    fact7
 )
-, fact8 as ( /* add payment charge */
+, fact9 as ( /* add payment charge */
   select
     * except(total_breakdown_amount, diff_refund)
     , case when diff_refund <> 0 and payment_charge = diff_refund
@@ -676,9 +722,9 @@ fd as (
         then refund_amount - (total_breakdown_amount + payment_charge)
       else diff_refund end as diff_refund
   from
-    fact7
+    fact8
 )
-, fact9 as ( /* add diff in multiples of the refund fee (25000) and set zero to payment charge */
+, fact10 as ( /* add diff in multiples of the refund fee (25000) and set zero to payment charge */
   select
     * except(refund_fee, commission, total_breakdown_amount, diff_refund, payment_charge)
     , case
@@ -728,9 +774,9 @@ fd as (
           then refund_amount - (total_breakdown_amount - refund_fee - commission + (refund_fee + (refund_amount - (total_breakdown_amount - commission))))
        else diff_refund end as diff_refund
   from
-    fact8
+    fact9
 )
-, fact10 as ( /* Add diff of admin fee (5000) and set zero to payment charge */
+, fact11 as ( /* Add diff of admin fee (5000) and set zero to payment charge */
   select
     * except(admin_fee, total_breakdown_amount, diff_refund, payment_charge)
     , case
@@ -755,9 +801,9 @@ fd as (
           then refund_amount - (total_breakdown_amount + diff_refund)
        else diff_refund end as diff_refund
   from
-    fact9
+    fact10
 )
-, fact11 as ( /* Set up order not issued */
+, fact12 as ( /* Set up order not issued */
   select
     Company
     , invoice_currency
@@ -835,9 +881,9 @@ fd as (
     , is_topup_match
     , refund_status
   from
-    fact10
+    fact11
 )
-, fact12 as ( /* Set up order only refund amount with admin fee/refund fee */
+, fact13 as ( /* Set up order only refund amount with admin fee/refund fee */
   select
     * except
         (
@@ -867,7 +913,15 @@ fd as (
             or
             is_reschedule
           )
-        then if(product_category = 'Flight', refund_amount+coalesce(-1*admin_fee,0)+coalesce(-1*refund_fee,0), 0)
+        then
+          case
+            when
+              product_category = 'Flight'
+              and (not is_reschedule or is_reschedule is null)
+              then refund_amount+coalesce(-1*admin_fee,0)+coalesce(-1*refund_fee,0)
+            when product_category = 'Flight' and is_reschedule then refund_amount
+            else 0
+          end  
       else refund_flight_amount end as refund_flight_amount
     , case when diff_refund <> 0
         and
@@ -1030,9 +1084,9 @@ fd as (
         then 0
       else diff_refund end as diff_refund
   from
-    fact11
+    fact12
 )
-, fact13 as ( /* Remove ancillary flight */
+, fact14 as ( /* Remove ancillary flight */
   select
     * except
         (
@@ -1048,9 +1102,9 @@ fd as (
         then total_breakdown_amount - total_ancillary_flight
       else total_breakdown_amount end as total_breakdown_amount
   from
-    fact12
+    fact13
 )
-, fact14 as (
+, fact15 as (
   select
     * except
         (
@@ -1063,7 +1117,24 @@ fd as (
         then refund_amount - (total_breakdown_amount + payment_charge)
       else diff_refund end as diff_refund
   from
-    fact13
+    fact14
+)
+, fact16 as (
+  select
+    * except
+        (
+          total_breakdown_amount, diff_refund, admin_fee
+        )
+    , case when diff_refund = 5000 and diff_refund + admin_fee = 0
+        then total_breakdown_amount + diff_refund
+      else total_breakdown_amount end as total_breakdown_amount
+    , case when diff_refund = 5000 and diff_refund + admin_fee = 0
+        then refund_amount - (total_breakdown_amount + diff_refund)
+      else diff_refund end as diff_refund
+    , case when diff_refund = 5000 and diff_refund + admin_fee = 0 then 0
+      else admin_fee end as admin_fee
+  from
+    fact15
 )
 , fact as (
   select
@@ -1129,9 +1200,9 @@ fd as (
         )
       end as is_refund_valid_flag
     , refund_status
-    , timestamp(datetime(current_timestamp(),'Asia/Jakarta')) as processed_timestamp
+    , current_timestamp() as processed_timestamp
   from
-    fact14
+    fact16
 )
 select
   *
