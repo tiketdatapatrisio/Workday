@@ -101,7 +101,7 @@ lsw as (
         )
         , struct
           (
-            'Insurance' as spend_category
+            'Travel_Insurance_Hotel_NHA' as spend_category
             , insurance_value as total_line_amount
             , case when insurance_value <> 0 then true
               else false end as valid_struct_flag
@@ -236,26 +236,14 @@ lsw as (
     , coalesce(safe_cast(quantity as string), '0') as quantity
     , coalesce(safe_cast(info_array.total_line_amount as string), '0') as total_line_amount
     , coalesce(if(Company <> 'GTN_IDN', '', safe_cast(round(currency_conversion,2) as string)), '0') as currency_conversion
-    , coalesce(concat(if(booking_code <> '', booking_code, 'No booking code'),' - Refund'), '') as booking_code
+    , coalesce(booking_code, '') as booking_code
     , coalesce(product_category, '') as product_category
     , coalesce(product_provider, '') as product_provider
     , coalesce(deposit_flag, '') as deposit_flag
     , if(product_category in ('Attraction','Activity','Event'), order_detail_name, '') as event_name
     , '' as payment_handling
     , coalesce(on_hold_status,'') as on_hold_status
-    , coalesce(
-      concat
-        (
-          if(memo = '' or memo is null, safe_cast(order_id as string), memo)
-          , if(memo <> '', ' - Refund', '')
-          , if
-              (
-                refund_split_code is not null and refund_split_code <> '' and refund_split_code <> '0'
-                , concat(' - Splitcode: ', refund_split_code)
-                , ''
-              )
-        )
-      ,'') as memo
+    , memo
     , coalesce(customer_reference_id,'') as customer_reference_id
     , row_number() over (order by refund_request_date, order_id, order_detail_id, info_array.data_order) as rn
   from
