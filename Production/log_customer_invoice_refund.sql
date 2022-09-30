@@ -23,7 +23,7 @@ lsw as (
   where
     Company = 'GTN_SGP'
     and date(refund_request_date) between
-      date_add(date(current_timestamp(),'Asia/Jakarta'), interval -4 day)
+      date_add(date(current_timestamp(),'Asia/Jakarta'), interval -8 day)
       and date_add(date(current_timestamp(),'Asia/Jakarta'), interval -1 day)
   qualify row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) = 1
 )

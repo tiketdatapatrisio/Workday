@@ -2,7 +2,7 @@ with
 fd as (
   select
     filter1
-    , date_add(filter1, interval -3 day) as filter2
+    , date_add(filter1, interval -7 day) as filter2
     , date_add(filter1, interval -365 day) as filter3
   from
   (
