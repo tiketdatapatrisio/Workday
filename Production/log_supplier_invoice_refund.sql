@@ -20,7 +20,7 @@ lsw as (
     date(refund_request_date) between
       date_add(date(current_timestamp(),'Asia/Jakarta'), interval -8 day)
       and date_add(date(current_timestamp(),'Asia/Jakarta'), interval -1 day)
-  qualify row_number() over(partition by order_id, order_detail_id order by processed_timestamp desc) = 1
+  qualify row_number() over(partition by order_id, order_detail_id, refund_id order by processed_timestamp desc) = 1
 )
 , refund as ( /*insert refund_id instead of order_detail_id*/
   select
